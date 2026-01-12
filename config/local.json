@@ -1,0 +1,7 @@
+{
+    "LINE_CHANNEL_SECRET": "your_line_channel_secret",
+    "LINE_CHANNEL_ACCESS_TOKEN": "your_line_channel_access_token",
+    "PORT": 3000,
+    "NEXT_PUBLIC_SUPABASE_URL": "https://icfrcunmnnfjfnvcrbsd.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY": "sb_publishable_o-rbg6Q8HYA4vjY6FlbhEA_0M7XPZvQ"
+}

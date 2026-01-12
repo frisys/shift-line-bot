@@ -3,7 +3,7 @@ import { WebhookRequestBody, PostbackEvent, messagingApi  } from '@line/bot-sdk'
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 
-const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_KEY!);
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!);
 const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET!;
 const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN!;
 
