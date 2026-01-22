@@ -34,7 +34,7 @@ export default function Dashboard() {
 
         // スタッフ一覧
         const { data: staffData } = await supabase
-          .from('users')
+          .from('profiles')
           .select('*')
           .eq('store_id', storeData.id)
           .neq('id', user.id); // 自分（店長）以外

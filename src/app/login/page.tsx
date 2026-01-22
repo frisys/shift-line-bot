@@ -19,7 +19,7 @@ export default function LoginPage() {
     } else {
       setMessage('ログイン成功！ユーザーID: ' + data.user?.id);
       // 成功したら/testページにリダイレクト
-      window.location.href = '/test';
+      window.location.href = '/dashboard';
     }
   };
 
