@@ -23,10 +23,15 @@ export default function Dashboard() {
       setUser(user);
 
       // 自分の店舗取得（owner_user_id = auth.uid() でRLSが効く）
-      const { data: storeData } = await supabase
+      const { data: storeData, error: storeError } = await supabase
         .from('stores')
         .select('*')
-        .eq('owner_user_id', user.id);
+        .eq('owner_user_id', user.id)
+        .maybeSingle();
+
+      if (storeError) {
+        console.error('店舗取得エラー:', storeError);
+      }
 
       if (storeData) {
         setStores([storeData]);
