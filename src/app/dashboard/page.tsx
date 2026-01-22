@@ -26,8 +26,7 @@ export default function Dashboard() {
       const { data: storeData } = await supabase
         .from('stores')
         .select('*')
-        .eq('owner_user_id', user.id)
-        .single();
+        .eq('owner_user_id', user.id);
 
       if (storeData) {
         setStores([storeData]);
