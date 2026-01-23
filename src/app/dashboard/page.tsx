@@ -54,6 +54,8 @@ export default function Dashboard() {
           .lte('shift_date', '2026-01-31');
 
         setPreferences(prefData || []);
+      } else {
+        return <div>店舗が見つかりません。店舗を作成してください。</div>;
       }
 
       setLoading(false);
