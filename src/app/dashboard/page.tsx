@@ -24,12 +24,14 @@ export default function Dashboard() {
           return;
         }
         setUser(user);
+        console.log('Logged in user:', user);
 
         // 2. 所属店舗一覧を取得（複数対応）
         const { data: storeData, error: storeError } = await supabase
           .from('stores')
           .select('*')
           .eq('owner_user_id', user.id);  // ← .single() ではなく全件
+        console.log('Fetched stores:', storeData);
 
         if (storeError) throw storeError;
 
