@@ -3,16 +3,21 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '../providers/SupabaseProvider';
 
 export default function Dashboard() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  const [currentUser, setUser] = useState<any>(null);
   const [stores, setStores] = useState<any[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
   const [staff, setStaff] = useState<any[]>([]);
   const [preferences, setPreferences] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { user, loading: authLoading } = useAuth();
+
+  if (authLoading) return <div>認証確認中...</div>;
+  if (!user) router.push('/login');
 
   useEffect(() => {
     async function loadData() {
@@ -77,7 +82,7 @@ export default function Dashboard() {
         .from('profiles')
         .select('*, user_stores!inner(role)')
         .eq('user_stores.store_id', storeId)
-        .neq('id', user?.id);
+        .neq('id', currentUser?.id);
 
       setStaff(staffData || []);
 
@@ -107,12 +112,12 @@ export default function Dashboard() {
 
   if (loading) return <div className="p-8 text-center">読み込み中...</div>;
   if (errorMsg) return <div className="p-8 text-red-600">{errorMsg}</div>;
-  if (!user) return null;
+  if (!currentUser) return null;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">ダッシュボード</h1>
-      <p className="mb-4">ようこそ、{user.email}さん</p>
+      <p className="mb-4">ようこそ、{currentUser.email}さん</p>
 
       {/* 店舗タブ / セレクト */}
       {stores.length > 1 ? (
