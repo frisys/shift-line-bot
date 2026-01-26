@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 
 export default function Dashboard() {
   const router = useRouter();
-  const [currentUser, setUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
   const [stores, setStores] = useState<any[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
   const [staff, setStaff] = useState<any[]>([]);
@@ -77,7 +77,7 @@ export default function Dashboard() {
         .from('profiles')
         .select('*, user_stores!inner(role)')
         .eq('user_stores.store_id', storeId)
-        .neq('id', currentUser?.id);
+        .neq('id', user?.id);
 
       setStaff(staffData || []);
 
@@ -107,12 +107,12 @@ export default function Dashboard() {
 
   if (loading) return <div className="p-8 text-center">読み込み中...</div>;
   if (errorMsg) return <div className="p-8 text-red-600">{errorMsg}</div>;
-  if (!currentUser) return null;
+  if (!user) return null;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">ダッシュボード</h1>
-      <p className="mb-4">ようこそ、{currentUser.email}さん</p>
+      <p className="mb-4">ようこそ、{user.email}さん</p>
 
       {/* 店舗タブ / セレクト */}
       {stores.length > 1 ? (
