@@ -7,20 +7,20 @@ import { useAuth } from '../providers/SupabaseProvider';
 
 export default function Dashboard() {
   const router = useRouter();
-  const [currentUser, setUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
   const [stores, setStores] = useState<any[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
   const [staff, setStaff] = useState<any[]>([]);
   const [preferences, setPreferences] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const { user, loading: authLoading } = useAuth();
-
-  if (authLoading) return <div>認証確認中...</div>;
-  if (!user) router.push('/login');
+  const { user: authUser, loading: authLoading } = useAuth();
 
   useEffect(() => {
+  let isMounted = true;  // アンマウントチェック用
     async function loadData() {
+      if (!isMounted) return;
+      setLoading(true);
       try {
         // 1. ユーザー確認
         const { data: { session } } = await supabase.auth.getSession();
@@ -29,8 +29,6 @@ export default function Dashboard() {
           return;
         }
         const currentUser = session.user;
-        console.log('ユーザーID:', currentUser.id);  // ここで確実に UUID が出るはず
-
         setUser(currentUser);
         console.log('Logged in user:', currentUser);
 
@@ -45,79 +43,97 @@ export default function Dashboard() {
 
         if (!storeData || storeData.length === 0) {
           setErrorMsg('店舗が見つかりません。まずは店舗を作成してください。');
-          setLoading(false);
           return;
         }
 
         setStores(storeData);
 
         // 3. デフォルトの店舗を選択（localStorageがあれば復元）
-        const savedStoreId = localStorage.getItem('selectedStoreId');
-        const initialStore = savedStoreId 
-          ? storeData.find(s => s.id === savedStoreId)
-          : storeData[0];
+        const saved = localStorage.getItem('selectedStoreId');
+        const initial = saved ? storeData.find(s => s.id === saved) : storeData[0];
+        const activeId = initial?.id || storeData[0].id;
 
-        const activeStoreId = initialStore?.id || storeData[0].id;
-        setSelectedStoreId(activeStoreId);
+        setSelectedStoreId(activeId);
+        console.log('Selected store ID:', activeId);
 
         // 4. 選択店舗のデータ読み込み
-        await loadStoreSpecificData(activeStoreId);
+        await loadStaff(activeId);
       } catch (err: any) {
         console.error(err);
         setErrorMsg('データの読み込みに失敗しました: ' + err.message);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
 
     loadData();
+    return () => {
+      isMounted = false;  // アンマウント時にフラグオフ
+    };
   }, [router]);
 
-  // 店舗切り替え時のデータ再取得
-  const loadStoreSpecificData = async (storeId: string) => {
-    setLoading(true);
-    try {
-      // スタッフ一覧
-      const { data: staffData } = await supabase
-        .from('profiles')
-        .select('*, user_stores!inner(role)')
-        .eq('user_stores.store_id', storeId)
-        .neq('id', currentUser?.id);
-
-      setStaff(staffData || []);
-
-      // シフト希望（例: 今月分）
-      const { data: prefData } = await supabase
-        .from('shift_preferences')
-        .select('*, profiles(name)')
-        .eq('store_id', storeId)
-        .gte('shift_date', '2026-01-01')
-        .lte('shift_date', '2026-01-31');
-
-      setPreferences(prefData || []);
-    } catch (err: any) {
-      console.error('店舗データ取得エラー:', err);
-      setErrorMsg('店舗データの読み込みに失敗しました');
-    } finally {
-      setLoading(false);
+  // loadStoreSpecificData内のスタッフ取得をまるごと置き換え
+  const loadStaff = async (storeId?: string) => {
+    if (!storeId) {
+      setStaff([]);
+      return;
     }
+
+    // 1. user_storesからこの店舗の全所属を取る
+    const { data: memberships } = await supabase
+      .from('user_stores')
+      .select('user_id, role')
+      .eq('store_id', storeId);
+
+    console.log('user_storesから取れた全所属件数:', memberships?.length || 0);
+    console.log('所属データ詳細:', memberships);
+
+    if (!memberships?.length) {
+      setStaff([]);
+      return;
+    }
+
+    // 2. user_idリストでprofilesを取る（名前・連勤日数など）
+    const userIds = memberships.map(m => m.user_id);
+
+    const { data: profilesData } = await supabase
+      .from('profiles')
+      .select('id, name, max_consecutive_days, max_weekly_days')
+      .in('id', userIds);
+
+    console.log('profilesから取れた件数:', profilesData?.length || 0);
+
+    // 3. roleをマージして最終リスト作成
+    const fullStaff = profilesData?.map(p => {
+      const mem = memberships.find(m => m.user_id === p.id);
+      return {
+        ...p,
+        role: mem?.role || '不明'
+      };
+    }) || [];
+
+    console.log('画面にセットするスタッフ一覧:', fullStaff);
+    setStaff(fullStaff);
   };
 
   // 店舗タブ切り替えハンドラ
-  const handleStoreChange = (storeId: string) => {
+  const handleStoreChange = (storeId: string, userId: string) => {
     setSelectedStoreId(storeId);
     localStorage.setItem('selectedStoreId', storeId);
-    loadStoreSpecificData(storeId);
+    loadStaff();
   };
 
   if (loading) return <div className="p-8 text-center">読み込み中...</div>;
   if (errorMsg) return <div className="p-8 text-red-600">{errorMsg}</div>;
-  if (!currentUser) return null;
+  if (authLoading) return <div>認証確認中...</div>;
+  if (!user) router.push('/login');
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">ダッシュボード</h1>
-      <p className="mb-4">ようこそ、{currentUser.email}さん</p>
+      <p className="mb-4">ようこそ、{user.email}さん</p>
 
       {/* 店舗タブ / セレクト */}
       {stores.length > 1 ? (
@@ -125,7 +141,7 @@ export default function Dashboard() {
           <label className="block text-sm font-medium mb-2">表示店舗を選択</label>
           <select
             value={selectedStoreId || ''}
-            onChange={(e) => handleStoreChange(e.target.value)}
+            onChange={(e) => handleStoreChange(e.target.value, user.id)}
             className="border rounded px-3 py-2"
           >
             {stores.map(store => (
@@ -165,8 +181,10 @@ export default function Dashboard() {
               <ul className="space-y-2">
                 {staff.map(s => (
                   <li key={s.id} className="bg-white p-3 rounded border">
-                    {s.name} ({s.user_stores?.role || 'staff'}) 
-                    - 最大連勤: {s.max_consecutive_days ?? '-'}日
+                    {s.name || '（名前未設定）'} 
+                    ({s.user_stores?.role || 'staff'}) 
+                    - 最大連勤: {s.max_consecutive_days != null ? `${s.max_consecutive_days}日` : '-'}
+                    - 週最大: {s.max_weekly_days != null ? `${s.max_weekly_days}日` : '-'}
                   </li>
                 ))}
               </ul>
@@ -192,7 +210,9 @@ export default function Dashboard() {
                   <tbody>
                     {preferences.map(p => (
                       <tr key={p.id} className="hover:bg-gray-50">
-                        <td className="p-3 border">{p.profiles?.name || '不明'}</td>
+                        <td className="p-3 border">
+                          {p.profiles?.name || p.user_id.substring(0, 8) + '...' || '不明'}
+                        </td>
                         <td className="p-3 border">{p.shift_date}</td>
                         <td className="p-3 border">{p.status}</td>
                         <td className="p-3 border">{p.time_slot || '-'}</td>
