@@ -57,7 +57,7 @@ export default function Dashboard() {
         console.log('Selected store ID:', activeId);
 
         // 4. 選択店舗のデータ読み込み
-        await loadStaff(activeId);
+        await loadStoreSpecificData(activeId);
       } catch (err: any) {
         console.error(err);
         setErrorMsg('データの読み込みに失敗しました: ' + err.message);
@@ -74,55 +74,54 @@ export default function Dashboard() {
     };
   }, [router]);
 
+  // 店舗が変わったら再読み込み（これが大事！）
+  useEffect(() => {
+    if (selectedStoreId) {
+      loadStoreSpecificData(selectedStoreId);
+    }
+  }, [selectedStoreId]);
+  
+  // 店舗タブ切り替えハンドラ
+  const handleStoreChange = (storeId: string) => {
+    setSelectedStoreId(storeId);
+    localStorage.setItem('selectedStoreId', storeId);
+  };
+
   // loadStoreSpecificData内のスタッフ取得をまるごと置き換え
-  const loadStaff = async (storeId?: string) => {
+  const loadStoreSpecificData = async (storeId: string) => {
     if (!storeId) {
       setStaff([]);
       return;
     }
 
-    // 1. user_storesからこの店舗の全所属を取る
-    const { data: memberships } = await supabase
-      .from('user_stores')
-      .select('user_id, role')
-      .eq('store_id', storeId);
+    console.log('Loading data for store ID:', storeId);
+  // user_stores から取得して profiles をネストで含める
+  const { data: userStores, error } = await supabase
+    .from('user_stores')
+    .select('role, profiles(*)')
+    .eq('store_id', storeId)
+    .neq('user_id', user?.id ?? '');
 
-    console.log('user_storesから取れた全所属件数:', memberships?.length || 0);
-    console.log('所属データ詳細:', memberships);
+  if (error) {
+    console.error(error);
+    setStaff([]);
+    return;
+  }
 
-    if (!memberships?.length) {
-      setStaff([]);
-      return;
-    }
+  // 必要な形に整形
+  const staffArr = (userStores || []).map((us: any) => {
+    const profile = us.profiles || {};
+    return {
+      id: profile.id,
+      name: profile.name,
+      max_consecutive_days: profile.max_consecutive_days,
+      max_weekly_days: profile.max_weekly_days,
+      user_stores: { role: us.role },
+    };
+  });
 
-    // 2. user_idリストでprofilesを取る（名前・連勤日数など）
-    const userIds = memberships.map(m => m.user_id);
-
-    const { data: profilesData } = await supabase
-      .from('profiles')
-      .select('id, name, max_consecutive_days, max_weekly_days')
-      .in('id', userIds);
-
-    console.log('profilesから取れた件数:', profilesData?.length || 0);
-
-    // 3. roleをマージして最終リスト作成
-    const fullStaff = profilesData?.map(p => {
-      const mem = memberships.find(m => m.user_id === p.id);
-      return {
-        ...p,
-        role: mem?.role || '不明'
-      };
-    }) || [];
-
-    console.log('画面にセットするスタッフ一覧:', fullStaff);
-    setStaff(fullStaff);
-  };
-
-  // 店舗タブ切り替えハンドラ
-  const handleStoreChange = (storeId: string, userId: string) => {
-    setSelectedStoreId(storeId);
-    localStorage.setItem('selectedStoreId', storeId);
-    loadStaff();
+  console.log('スタッフ取得結果:', staffArr);
+  setStaff(staffArr);
   };
 
   if (loading) return <div className="p-8 text-center">読み込み中...</div>;
@@ -131,7 +130,7 @@ export default function Dashboard() {
   if (!user) router.push('/login');
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto bg-white text-black dark:bg-gray-900 dark:text-white">
       <h1 className="text-2xl font-bold mb-6">ダッシュボード</h1>
       <p className="mb-4">ようこそ、{user.email}さん</p>
 
@@ -141,7 +140,7 @@ export default function Dashboard() {
           <label className="block text-sm font-medium mb-2">表示店舗を選択</label>
           <select
             value={selectedStoreId || ''}
-            onChange={(e) => handleStoreChange(e.target.value, user.id)}
+            onChange={(e) => handleStoreChange(e.target.value)}
             className="border rounded px-3 py-2"
           >
             {stores.map(store => (
