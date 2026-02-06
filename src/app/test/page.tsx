@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { useEffect, useState } from 'react';
 
 export default function TestPage() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [stores, setStores] = useState<any[]>([]);
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
