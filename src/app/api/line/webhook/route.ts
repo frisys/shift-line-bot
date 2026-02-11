@@ -18,6 +18,8 @@ export async function POST(req: NextRequest) {
   console.log('Webhookリクエスト受信！');
   const body = await req.text();
   const signature = req.headers.get('x-line-signature') || '';
+  console.log('LINE_CHANNEL_SECRET:', config.channelSecret ? '存在' : 'undefined');
+  console.log('LINE_CHANNEL_ACCESS_TOKEN:', config.channelAccessToken ? '存在' : 'undefined');
 
   if (!validateSignature(body, signature)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
