@@ -22,21 +22,21 @@ export async function POST(req: NextRequest) {
   const signature = req.headers.get('x-line-signature') || '';
   console.log('x-line-signature:', signature);
 
-  // if (!validateSignature(body, signature)) {
-  //   return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
-  // }
+  if (!validateSignature(body, signature)) {
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+  }
 
   const events = JSON.parse(body).events;
 
-  // for (const event of events) {
-  //   if (event.type === 'follow') {
-  //     await handleFollow(event);
-  //   } else if (event.type === 'postback') {
-  //     await handlePostback(event);
-  //   } else if (event.type === 'message') {
-  //     await handleMessage(event);
-  //   }
-  // }
+  for (const event of events) {
+    if (event.type === 'follow') {
+      await handleFollow(event);
+    } else if (event.type === 'postback') {
+      await handlePostback(event);
+    } else if (event.type === 'message') {
+      await handleMessage(event);
+    }
+  }
 
   return NextResponse.json({ status: 'OK' }, {
     headers: {
