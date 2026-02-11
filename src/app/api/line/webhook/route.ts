@@ -1,22 +1,9 @@
 // app/api/line/webhook/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase/client';
+import { config, client } from '@/lib/line/client';
 import { messagingApi, middleware } from '@line/bot-sdk';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-const config = {
-  channelSecret: process.env.LINE_CHANNEL_SECRET!,
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
-};
-
-const client = new messagingApi.MessagingApiClient({
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
-});
 
 // 署名検証
 function validateSignature(body: string, signature: string) {
