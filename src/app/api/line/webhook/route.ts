@@ -16,11 +16,8 @@ function validateSignature(body: string, signature: string) {
 
 export async function POST(req: NextRequest) {
   console.log('Webhookリクエスト受信！');
-  console.log('Headers:', Object.fromEntries(req.headers));
   const body = await req.text();
-  console.log('Body:', body);
   const signature = req.headers.get('x-line-signature') || '';
-  console.log('x-line-signature:', signature);
 
   if (!validateSignature(body, signature)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
@@ -30,10 +27,13 @@ export async function POST(req: NextRequest) {
 
   for (const event of events) {
     if (event.type === 'follow') {
+      console.log('友達追加イベント検出');
       await handleFollow(event);
     } else if (event.type === 'postback') {
+      console.log('Postbackイベント検出');
       await handlePostback(event);
     } else if (event.type === 'message') {
+      console.log('メッセージイベント検出');
       await handleMessage(event);
     }
   }
