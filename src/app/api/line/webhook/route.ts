@@ -7,10 +7,19 @@ import { messagingApi, middleware } from '@line/bot-sdk';
 
 // 署名検証
 function validateSignature(body: string, signature: string) {
+  if (!process.env.LINE_CHANNEL_SECRET) {
+    console.error('署名検証失敗: SECRET未設定');
+    return false;
+  }
+
   const hash = crypto
-    .createHmac('sha256', config.channelSecret)
+    .createHmac('sha256', process.env.LINE_CHANNEL_SECRET)
     .update(body)
     .digest('base64');
+
+  console.log('計算したhash:', hash);
+  console.log('受信signature:', signature);
+
   return hash === signature;
 }
 
