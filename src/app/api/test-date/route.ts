@@ -4,8 +4,8 @@ import { NextResponse } from 'next/server';
 export async function GET() {
   return NextResponse.json({
     // LINE関連
-    LINE_CHANNEL_SECRET: process.env.LINE_CHANNEL_SECRET ? '存在する（値は非表示）' : 'undefined',
-    LINE_CHANNEL_ACCESS_TOKEN: process.env.LINE_CHANNEL_ACCESS_TOKEN ? '存在する（値は非表示）' : 'undefined',
+    LINE_CHANNEL_SECRET: process.env.LINE_CHANNEL_SECRET || 'undefined',
+    LINE_CHANNEL_ACCESS_TOKEN: process.env.LINE_CHANNEL_ACCESS_TOKEN || 'undefined',
     
     // Supabase関連（念のため）
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || 'undefined',
