@@ -15,8 +15,12 @@ function validateSignature(body: string, signature: string) {
 }
 
 export async function POST(req: NextRequest) {
+  console.log('Webhookリクエスト受信！');
+  console.log('Headers:', Object.fromEntries(req.headers));
   const body = await req.text();
+  console.log('Body:', body);
   const signature = req.headers.get('x-line-signature') || '';
+  console.log('x-line-signature:', signature);
 
   if (!validateSignature(body, signature)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
