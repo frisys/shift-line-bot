@@ -1,4 +1,4 @@
-
+'use client';
 import { messagingApi, middleware } from '@line/bot-sdk';
 
 export const config = {
