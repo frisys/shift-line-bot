@@ -1,30 +1,26 @@
 // app/api/line/webhook/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { supabase } from '@/lib/supabase/client';
+import { createClient } from '@supabase/supabase-js';
 import { messagingApi } from '@line/bot-sdk';
 
 // 署名検証
 function validateSignature(body: string, signature: string) {
-  if (!process.env.LINE_CHANNEL_SECRET) {
-    console.error('署名検証失敗: SECRET未設定');
-    return false;
-  }
-
   const hash = crypto
-    .createHmac('sha256', process.env.LINE_CHANNEL_SECRET)
+    .createHmac('sha256', process.env.LINE_CHANNEL_SECRET!)
     .update(body)
     .digest('base64');
-
-  console.log('計算したhash:', hash);
-  console.log('受信signature:', signature);
-
   return hash === signature;
 }
 
 const client = new messagingApi.MessagingApiClient({
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
 });
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+);
 
 export async function POST(req: NextRequest) {
   console.log('Webhookリクエスト受信！');
