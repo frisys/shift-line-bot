@@ -2,8 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { supabase } from '@/lib/supabase/client';
-import { config, client } from '@/lib/line/client';
-import { messagingApi, middleware } from '@line/bot-sdk';
+import { messagingApi } from '@line/bot-sdk';
 
 // 署名検証
 function validateSignature(body: string, signature: string) {
@@ -23,12 +22,16 @@ function validateSignature(body: string, signature: string) {
   return hash === signature;
 }
 
+const client = new messagingApi.MessagingApiClient({
+  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
+});
+
 export async function POST(req: NextRequest) {
   console.log('Webhookリクエスト受信！');
   const body = await req.text();
   const signature = req.headers.get('x-line-signature') || '';
-  console.log('LINE_CHANNEL_SECRET:', config.channelSecret ? '存在' : 'undefined');
-  console.log('LINE_CHANNEL_ACCESS_TOKEN:', config.channelAccessToken ? '存在' : 'undefined');
+  console.log('LINE_CHANNEL_SECRET:', process.env.LINE_CHANNEL_SECRET ? '存在' : 'undefined');
+  console.log('LINE_CHANNEL_ACCESS_TOKEN:', process.env.LINE_CHANNEL_ACCESS_TOKEN ? '存在' : 'undefined');
 
   if (!validateSignature(body, signature)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
