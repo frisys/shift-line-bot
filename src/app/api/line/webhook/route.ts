@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { messagingApi } from '@line/bot-sdk';
-import { v4 as uuidv4 } from 'uuid';
 
 // 署名検証
 function validateSignature(body: string, signature: string) {
@@ -61,7 +60,6 @@ export async function POST(req: NextRequest) {
 async function handleFollow(event: any) {
   const lineUserId = event.source.userId;
   const profile = await client.getProfile(lineUserId);
-  const newId = uuidv4();
 
   console.log('友達追加！LINE User ID:', lineUserId);
   console.log('名前:', profile.displayName);
@@ -70,7 +68,6 @@ async function handleFollow(event: any) {
     const { data, error } = await supabase
       .from('profiles')
       .upsert({
-        id: newId,
         line_user_id: lineUserId,
         name: profile.displayName,
       }, {
@@ -82,8 +79,6 @@ async function handleFollow(event: any) {
     if (error) {
       console.error('profiles upsertエラー:', error);
       throw error;
-    } else {
-      console.log('profiles登録成功！ id:', newId);
     }
 
     console.log('profiles登録成功:', data);
