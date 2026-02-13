@@ -58,26 +58,44 @@ export async function POST(req: NextRequest) {
 
 // 友達追加時の処理
 async function handleFollow(event: any) {
-    const userId = event.source.userId;
-    const profile = await client.getProfile(userId);
+  const lineUserId = event.source.userId;
+  const profile = await client.getProfile(lineUserId);
 
-    // profilesに登録（すでにあれば更新）
-    await supabase.from('profiles').upsert({
-        id: userId,  // LINEのuserIdをidとして使う（auth.usersと別管理の場合）
+  console.log('友達追加！LINE User ID:', lineUserId);
+  console.log('名前:', profile.displayName);
+
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .upsert({
+        line_user_id: lineUserId,
         name: profile.displayName,
-        line_user_id: userId,
-    });
+      }, {
+        onConflict: 'line_user_id',
+      })
+      .select()
+      .single();
 
-  // 挨拶メッセージ
-await client.replyMessage({
-    replyToken: event.replyToken,
-    messages: [
+    if (error) {
+      console.error('profiles upsertエラー:', error);
+      throw error;
+    }
+
+    console.log('profiles登録成功:', data);
+
+    // 挨拶メッセージ
+    await client.replyMessage({
+      replyToken: event.replyToken,
+      messages: [
         {
-        type: 'text',
-        text: `こんにちは、${profile.displayName}さん！\nシフト希望を提出できます。メニューから「シフト希望提出」を選んでください！`,
+          type: 'text',
+          text: `こんにちは、${profile.displayName}さん！\nシフト希望を提出できます。メニューから「シフト希望提出」を選んでください！`,
         },
-    ],
+      ],
     });
+  } catch (err) {
+    console.error('handleFollowエラー:', err);
+  }
 }
 
 // メッセージ受信時（メニュー表示など）
