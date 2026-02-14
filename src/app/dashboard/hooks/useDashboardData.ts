@@ -70,7 +70,7 @@ export function useDashboardData() {
         // スタッフ
         const { data: memberships } = await supabase
           .from('user_stores')
-          .select('user_id, role, max_consecutive_days, max_weekly_days, unavailable_days, preferred_time_slots')
+          .select('user_id, line_user_id, role, max_consecutive_days, max_weekly_days, unavailable_days, preferred_time_slots')
           .eq('store_id', selectedStoreId);
 
         const userIds = memberships?.map(m => m.user_id) || [];
@@ -87,6 +87,7 @@ export function useDashboardData() {
             name: p.name,
             role: mem?.role || 'staff',
             store_id: selectedStoreId || '',
+            line_user_id: mem?.line_user_id || '',
             max_consecutive_days: mem?.max_consecutive_days ?? 5,
             max_weekly_days: mem?.max_weekly_days ?? 5,
             unavailable_days: mem?.unavailable_days ?? [],

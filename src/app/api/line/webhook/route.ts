@@ -124,13 +124,14 @@ async function handleMessage(event: any) {
 // 店舗番号入力処理
 async function handleStoreCodeInput(lineUserId: string, code: string, replyToken: string) {
   const trimmedCode = code.trim(); // スペース除去
-  console.log('店舗コード入力受信！入力値:', trimmedCode);
+  const upperCode = trimmedCode.toUpperCase();
+  console.log('店舗コード入力受信！入力値:', upperCode);
 
   // クエリ実行前にログ
   const { data: store, error } = await supabase
     .from('stores')
     .select('id, name, store_code')
-    .eq('store_code', trimmedCode)
+    .eq('store_code', upperCode)
     .single();
 
   console.log('クエリ結果 - error:', error);
@@ -155,7 +156,7 @@ async function handleStoreCodeInput(lineUserId: string, code: string, replyToken
 
   // user_storesに登録（staffとして）
   const { error: storesError } = await supabase.from('user_stores').upsert({
-    user_id: lineUserId,  // LINE userIdをuser_idとして使う（auth.usersと別管理）
+    user_id: lineUserId,
     store_id: store.id,
     role: 'staff',
   }, { onConflict: 'user_id, store_id' });
