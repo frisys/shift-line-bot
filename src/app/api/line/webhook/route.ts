@@ -100,12 +100,76 @@ async function handleFollow(event: any) {
 
 // メッセージ受信時（メニュー表示など）
 async function handleMessage(event: any) {
-  if (event.message.type === 'text') {
-    // テキストで「希望提出」など言われたらFlexメニュー送る（簡易版）
-    if (event.message.text.includes('希望')) {
+  if (event.message.type !== 'text') return;
+
+  const text = event.message.text.trim();
+  const lineUserId = event.source.userId;
+
+  // 店舗番号っぽい入力（英数4〜10文字くらい）を検知
+  if (/^[A-Za-z0-9-]{4,10}$/.test(text)) {
+    await handleStoreCodeInput(lineUserId, text, event.replyToken);
+  } else {
+    // 通常メッセージ（希望提出など）
+    if (text.includes('希望') || text.includes('シフト')) {
       await sendShiftMenu(event.replyToken);
+    } else {
+      await client.replyMessage({
+        replyToken: event.replyToken,
+        messages: [{ type: 'text', text: '「シフト希望提出」と送るとメニューが出ます！' }],
+      });
     }
   }
+}
+
+// 店舗番号入力処理
+async function handleStoreCodeInput(lineUserId: string, code: string, replyToken: string) {
+  // 店舗コードで店舗を探す
+  const { data: store, error } = await supabase
+    .from('stores')
+    .select('id')
+    .eq('store_code', code)
+    .single();
+
+  if (error || !store) {
+    await client.replyMessage({
+      replyToken,
+      messages: [{ type: 'text', text: '店舗コードが見つかりませんでした。もう一度確認してください！' }],
+    });
+    return;
+  }
+
+  // profilesにLINE userId登録（すでにあればスキップ）
+  await supabase.from('profiles').upsert({
+    line_user_id: lineUserId,
+    // nameは友達追加時に入ってるはずなので省略可
+  }, { onConflict: 'line_user_id' });
+
+  // user_storesに登録（staffとして）
+  const { error: storesError } = await supabase.from('user_stores').upsert({
+    user_id: lineUserId,  // LINE userIdをuser_idとして使う（auth.usersと別管理）
+    store_id: store.id,
+    role: 'staff',
+  }, { onConflict: 'user_id, store_id' });
+
+  if (storesError) {
+    console.error('user_stores登録エラー:', storesError);
+    await client.replyMessage({
+      replyToken,
+      messages: [{ type: 'text', text: '登録に失敗しました。店舗に連絡してください。' }],
+    });
+    return;
+  }
+
+  await client.replyMessage({
+    replyToken,
+    messages: [
+      { type: 'text', text: '店舗登録完了しました！' },
+      { type: 'text', text: 'これからシフト希望を提出できます。メニューから選んでください！' },
+    ],
+  });
+
+  // 希望提出メニュー送る
+  await sendShiftMenu(replyToken);
 }
 
 // postback処理（希望提出）
