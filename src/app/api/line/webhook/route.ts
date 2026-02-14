@@ -23,37 +23,43 @@ const supabase = createClient(
 );
 
 export async function POST(req: NextRequest) {
-  console.log('Webhookリクエスト受信！');
   const body = await req.text();
   const signature = req.headers.get('x-line-signature') || '';
-  console.log('LINE_CHANNEL_SECRET:', process.env.LINE_CHANNEL_SECRET ? '存在' : 'undefined');
-  console.log('LINE_CHANNEL_ACCESS_TOKEN:', process.env.LINE_CHANNEL_ACCESS_TOKEN ? '存在' : 'undefined');
 
   if (!validateSignature(body, signature)) {
-    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }
 
-  console.log('body:', body);
-  const events = JSON.parse(body).events;
+  const parsed = JSON.parse(body);
+  const events = parsed.events;
 
+  // まず全イベントに即返事（5秒以内）
   for (const event of events) {
-    if (event.type === 'follow') {
-      console.log('友達追加イベント検出');
-      await handleFollow(event);
-    } else if (event.type === 'postback') {
-      console.log('Postbackイベント検出');
-      await handlePostback(event);
-    } else if (event.type === 'message') {
-      console.log('メッセージイベント検出');
-      await handleMessage(event);
+    if (event.replyToken) {
+      await client.replyMessage({
+        replyToken: event.replyToken,
+        messages: [{ type: 'text', text: '処理中です...！' }],
+      });
     }
   }
 
-  return NextResponse.json({ status: 'OK' }, {
-    headers: {
-      'Cache-Control': 'no-store'
-    },
-  });
+  // 重い処理は非同期で後回し
+  processEventsAsync(events).catch(err => console.error('非同期処理エラー:', err));
+
+  return NextResponse.json({ status: 'OK' });
+}
+
+// 非同期処理関数
+async function processEventsAsync(events: any[]) {
+  for (const event of events) {
+    if (event.type === 'follow') {
+      await handleFollow(event);
+    } else if (event.type === 'message') {
+      await handleMessage(event);
+    } else if (event.type === 'postback') {
+      await handlePostback(event);
+    }
+  }
 }
 
 // 友達追加時の処理
