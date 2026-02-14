@@ -123,20 +123,29 @@ async function handleMessage(event: any) {
 
 // 店舗番号入力処理
 async function handleStoreCodeInput(lineUserId: string, code: string, replyToken: string) {
-  // 店舗コードで店舗を探す
+  const trimmedCode = code.trim(); // スペース除去
+  console.log('店舗コード入力受信！入力値:', trimmedCode);
+
+  // クエリ実行前にログ
   const { data: store, error } = await supabase
     .from('stores')
-    .select('id')
-    .eq('store_code', code)
+    .select('id, name, store_code')
+    .eq('store_code', trimmedCode)
     .single();
 
+  console.log('クエリ結果 - error:', error);
+  console.log('クエリ結果 - data:', store);
+
   if (error || !store) {
+    console.error('店舗検索失敗:', error?.message || 'レコードなし');
     await client.replyMessage({
       replyToken,
-      messages: [{ type: 'text', text: '店舗コードが見つかりませんでした。もう一度確認してください！' }],
+      messages: [{ type: 'text', text: '店舗コードが見つかりませんでした。\n入力したコード: ' + trimmedCode + '\nもう一度確認してください！' }],
     });
     return;
   }
+
+  console.log('店舗発見！ID:', store.id, '名前:', store.name);
 
   // profilesにLINE userId登録（すでにあればスキップ）
   await supabase.from('profiles').upsert({
