@@ -116,165 +116,184 @@ export default function StoreSummary({ selectedStoreId, stores, onUpdateStores }
   ];
 
   return (
-    <section className="mb-8">
-      <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">店舗情報</h2>
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-          <div>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white">{store.name}</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              店舗コード（スタッフに伝えてください）：
-              <span className="ml-2 font-mono text-xl font-bold text-blue-600 dark:text-blue-400 tracking-wider">
-                {store.store_code || '未設定'}
-              </span>
-            </p>
-          </div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              必要人数テンプレ
-            </h2>
+    <section className="mb-10">
+      <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white flex items-center gap-3">
+        <span className="inline-block w-2 h-8 bg-blue-600 rounded-full"></span>
+        店舗情報
+      </h2>
 
-            {!isEditing ? (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-              >
-                編集
-              </button>
-            ) : (
-              <div className="space-x-3">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden">
+        {/* ヘッダーエリア */}
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            <div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
+                {store.name}
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                店舗コード（スタッフに伝えてください）：
+                <span className="ml-2 font-mono text-lg font-bold text-blue-600 dark:text-blue-400 tracking-widest">
+                  {store.store_code || '未設定'}
+                </span>
+              </p>
+            </div>
+
+            <div className="flex items-center gap-4">
+              {!isEditing ? (
                 <button
-                  onClick={handleSaveClick}
-                  disabled={loading}
-                  className={`px-4 py-2 text-sm font-medium rounded-lg ${
-                    loading
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-green-600 hover:bg-green-700 text-white'
-                  } transition-colors`}
+                  onClick={() => setIsEditing(true)}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-sm"
                 >
-                  {loading ? '保存中...' : '保存'}
+                  編集
                 </button>
-                <button
-                  onClick={handleCancel}
-                  className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
-                >
-                  キャンセル
-                </button>
-              </div>
-            )}
-          </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-4">
-          {days.map(({ eng, ja }) => {
-            const count = editedRequired[eng] ?? originalRequired[eng] ?? 0;
-            const isChanged = editedRequired[eng] !== undefined && editedRequired[eng] !== originalRequired[eng];
-            const isSunday = eng === 'sun';
-            return (
-              <div
-                key={eng}
-                className={`rounded-xl border p-4 text-center shadow-sm transition-all 
-                  ${isSunday ? 'border-red-300 bg-red-50 dark:bg-red-950/30' : ''}
-                  ${isChanged ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/30' : 'border-gray-200 dark:border-gray-700'}
-                  `}
-              >
-                <div className="text-xl font-bold text-gray-700 dark:text-gray-300 mb-2">
-                  {ja}
-                </div>
-
-                {isEditing ? (
-                  <input
-                    type="number"
-                    value={count}
-                    onChange={(e) => handleInputChange(eng, e.target.value)}
-                    className={`w-full text-4xl font-black text-center bg-transparent border-b-2 focus:outline-none focus:border-blue-500 ${
-                      isChanged ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-gray-400 dark:border-gray-500'
-                    }`}
-                    min="0"
-                    max="10"
-                  />
-                ) : (
-                  <div 
-                    onClick={() => setIsEditing(true)}
-                    className={`text-4xl font-black cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors ${
-                      isChanged ? 'text-blue-600 dark:text-blue-400' : ''
+              ) : (
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleSaveClick}
+                    disabled={loading}
+                    className={`px-5 py-2.5 rounded-lg font-medium text-white transition-colors ${
+                      loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
                     }`}
                   >
-                    {count}
-                  </div>
-                )}
-
-                <div className="text-sm mt-1 text-gray-600 dark:text-gray-400">人</div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* 確認ダイアログ */}
-        {showConfirm && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
-              <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">変更を確認</h3>
-                <p className="mt-2 text-gray-600 dark:text-gray-300">
-                  以下の曜日で必要人数を変更します。よろしいですか？
-                </p>
-              </div>
-
-              <div className="p-6 max-h-96 overflow-y-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 dark:border-gray-700">
-                      <th className="pb-3 font-medium text-gray-700 dark:text-gray-300">曜日</th>
-                      <th className="pb-3 font-medium text-gray-700 dark:text-gray-300">変更前</th>
-                      <th className="pb-3 font-medium text-gray-700 dark:text-gray-300">変更後</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(editedRequired).map(([day, newCount]) => {
-                      const original = originalRequired[day] ?? 0;
-                      if (newCount === original) return null;
-
-                      return (
-                        <tr key={day} className="border-b border-gray-100 dark:border-gray-800 last:border-b-0">
-                          <td className="py-3">{getJapaneseWeekday(day)}</td>
-                          <td className="py-3 text-gray-500 dark:text-gray-400">{original}人</td>
-                          <td className="py-3 font-bold text-blue-600 dark:text-blue-400">{newCount}人</td>
-                        </tr>
-                      );
-                    })}
-                    {Object.keys(editedRequired).every(day => editedRequired[day] === originalRequired[day]) && (
-                      <tr>
-                        <td colSpan={3} className="py-6 text-center text-gray-500 dark:text-gray-400">
-                          変更内容がありません
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="flex justify-end gap-4 p-6 border-t border-gray-200 dark:border-gray-700">
-                <button
-                  onClick={() => setShowConfirm(false)}
-                  className="px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
-                  キャンセル
-                </button>
-                <button
-                  onClick={handleConfirmSave}
-                  disabled={loading}
-                  className={`px-5 py-2.5 rounded-lg text-white transition-colors ${
-                    loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
-                  }`}
-                >
-                  {loading ? '保存中...' : '保存する'}
-                </button>
-              </div>
+                    {loading ? '保存中...' : '保存'}
+                  </button>
+                  <button
+                    onClick={handleCancel}
+                    className="px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
+
+        {/* 必要人数カードエリア */}
+        <div className="p-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-4">
+            {days.map(({ eng, ja }) => {
+              const count = editedRequired[eng] ?? originalRequired[eng] ?? 0;
+              const isChanged = editedRequired[eng] !== undefined && editedRequired[eng] !== originalRequired[eng];
+
+              let bgClass = 'bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-700';
+              let textClass = 'text-gray-900 dark:text-white';
+              if (count >= 5) {
+                bgClass = 'bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950/30 dark:to-red-900/30 border-red-200 dark:border-red-800';
+                textClass = 'text-red-700 dark:text-red-300';
+              } else if (count >= 3) {
+                bgClass = 'bg-gradient-to-br from-yellow-50 to-yellow-100 dark:from-yellow-950/30 dark:to-yellow-900/30 border-yellow-200 dark:border-yellow-800';
+                textClass = 'text-yellow-700 dark:text-yellow-300';
+              } else if (count > 0) {
+                bgClass = 'bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/30 dark:to-green-900/30 border-green-200 dark:border-green-800';
+                textClass = 'text-green-700 dark:text-green-300';
+              }
+
+              return (
+                <div
+                  key={eng}
+                  className={`rounded-xl border shadow-sm p-5 text-center transition-all hover:shadow-md ${bgClass} ${
+                    isChanged ? 'ring-2 ring-blue-500 dark:ring-blue-400' : ''
+                  }`}
+                >
+                  <div className={`text-4xl font-extrabold mb-2 ${textClass}`}>
+                    {ja}
+                  </div>
+
+                  {isEditing ? (
+                    <input
+                      type="number"
+                      value={count}
+                      onChange={(e) => handleInputChange(eng, e.target.value)}
+                      className={`w-20 mx-auto block text-5xl font-black text-center bg-transparent border-b-3 focus:outline-none focus:border-blue-500 transition-colors ${
+                        isChanged ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white'
+                      }`}
+                      min="0"
+                      max="10"
+                    />
+                  ) : (
+                    <div
+                      onClick={() => setIsEditing(true)}
+                      className={`text-6xl font-black cursor-pointer transition-colors hover:scale-105 ${textClass}`}
+                    >
+                      {count}
+                    </div>
+                  )}
+
+                  <div className="text-sm mt-3 opacity-80 text-gray-600 dark:text-gray-400">
+                    人
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
+
+      {/* 確認ダイアログ */}
+      {showConfirm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">変更を確認</h3>
+              <p className="mt-2 text-gray-600 dark:text-gray-300">
+                以下の曜日で必要人数を変更します。よろしいですか？
+              </p>
+            </div>
+
+            <div className="p-6 max-h-96 overflow-y-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="pb-3 font-medium text-gray-700 dark:text-gray-300">曜日</th>
+                    <th className="pb-3 font-medium text-gray-700 dark:text-gray-300">変更前</th>
+                    <th className="pb-3 font-medium text-gray-700 dark:text-gray-300">変更後</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(editedRequired).map(([day, newCount]) => {
+                    const original = originalRequired[day] ?? 0;
+                    if (newCount === original) return null;
+
+                    return (
+                      <tr key={day} className="border-b border-gray-100 dark:border-gray-800 last:border-b-0">
+                        <td className="py-3">{getJapaneseWeekday(day)}</td>
+                        <td className="py-3 text-gray-500 dark:text-gray-400">{original}人</td>
+                        <td className="py-3 font-bold text-blue-600 dark:text-blue-400">{newCount}人</td>
+                      </tr>
+                    );
+                  })}
+                  {Object.keys(editedRequired).every(day => editedRequired[day] === originalRequired[day]) && (
+                    <tr>
+                      <td colSpan={3} className="py-6 text-center text-gray-500 dark:text-gray-400">
+                        変更内容がありません
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end gap-4 p-6 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => setShowConfirm(false)}
+                className="px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleConfirmSave}
+                disabled={loading}
+                className={`px-5 py-2.5 rounded-lg text-white transition-colors ${
+                  loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                {loading ? '保存中...' : '保存する'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
