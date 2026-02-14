@@ -89,7 +89,7 @@ async function handleFollow(event: any) {
       messages: [
         {
           type: 'text',
-          text: `こんにちは、${profile.displayName}さん！\nシフト希望を提出できます。メニューから「シフト希望提出」を選んでください！`,
+          text: `こんにちは、${profile.displayName}さん！\n\nあなたの店舗コードを入力してください。\n例: ABC123\n（店長からもらった6桁のコードです）`,
         },
       ],
     });
