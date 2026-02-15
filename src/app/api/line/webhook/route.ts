@@ -107,7 +107,9 @@ async function handleFollow(event: any) {
 async function getProfileWithRetry(userId: string, maxRetries = 3) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      console.log(`getProfile リトライ${attempt}開始: ユーザーID ${userId}`);
       const profile = await client.getProfile(userId);
+      console.log(`getProfile リトライ${attempt}成功:`, profile);
       return profile;
     } catch (err: any) {
       console.error(`getProfile リトライ${attempt}/${maxRetries}失敗:`, err.message);
