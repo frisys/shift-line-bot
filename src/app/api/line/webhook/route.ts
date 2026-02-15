@@ -79,9 +79,12 @@ async function handleFollow(event: any) {
   const lineUserId = event.source.userId;
   console.log('友達追加イベント受信！ユーザーID:', lineUserId);
   // const profile = await getProfileWithRetry(lineUserId);
-  const profile = await client.getProfile(lineUserId).catch(err => {
-    console.error('getProfile失敗:', err);
-    return { displayName: '不明なユーザー' }; // 失敗しても処理続行
+  const profile = await client.getProfile(lineUserId).then(profile => {
+    console.log('getProfile成功:', profile.displayName);
+    return profile;
+  }).catch(err => {
+    console.error('getProfile失敗:', err instanceof Error ? err.message : String(err));
+    return { displayName: '未設定' }; // プロフィール取得失敗時のデフォルト値
   });
 
   console.log('友達追加処理開始', { lineUserId, name: profile.displayName });
