@@ -49,7 +49,9 @@ export async function POST(req: NextRequest) {
     }
   });
 
+  console.log('イベント受信:', events.map((e: { type: any; }) => e.type).join(', '));
   await Promise.all(replyPromises);
+  console.log('全イベントに即返事完了');
 
   // 本処理は完全に非同期で後回し（replyToken使わない）
   Promise.all(events.map(processEvent)).catch(err => {
@@ -78,6 +80,7 @@ async function processEvent(event: any) {
 // 友達追加時の処理
 async function handleFollow(event: any) {
   const lineUserId = event.source.userId;
+  console.log('友達追加イベント受信！ユーザーID:', lineUserId);
   const profile = await getProfileWithRetry(lineUserId);
 
   console.log('友達追加処理開始', { lineUserId, name: profile.displayName });
