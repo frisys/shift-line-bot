@@ -36,23 +36,34 @@ export async function POST(req: NextRequest) {
   // イベントごとに即返事（5秒以内必須）
   for (const event of events) {
     if (event.replyToken) {
-      try {
-        await client.replyMessage({
-          replyToken: event.replyToken,
-          messages: [{ type: 'text', text: '処理中です...！' }],
-        });
-      } catch (replyErr) {
-        console.error('即返事エラー:', replyErr);
-      }
+      await client.replyMessage({
+        replyToken: event.replyToken,
+        messages: [{ type: 'text', text: '処理中です...！' }],
+      });
     }
   }
-
+// 友達追加だけ遅延実行
+Promise.all(events.map((event: { type: string; }) => {
+  if (event.type === 'follow') {
+    return handleFollowDelayed(event);
+  }
+})).catch(err => console.error('遅延処理エラー:', err));
   // 重い処理は完全に別スレッド（Promiseで投げて即return）
   Promise.all(events.map((event: any) => processEvent(event))).catch(err => {
     console.error('非同期処理エラー:', err);
   });
 
   return NextResponse.json({ status: 'OK' });
+}
+
+async function handleFollowDelayed(event: any) {
+  try {
+    const lineUserId = event.source.userId;
+    const profile = await getProfileWithRetry(lineUserId);
+    // 以降の処理...
+  } catch (err) {
+    console.error('遅延handleFollowエラー:', err);
+  }
 }
 
 // 個別イベント処理（非同期）
@@ -73,7 +84,7 @@ async function processEvent(event: any) {
 // 友達追加時の処理
 async function handleFollow(event: any) {
   const lineUserId = event.source.userId;
-  const profile = await client.getProfile(lineUserId);
+  const profile = await getProfileWithRetry(lineUserId);
 
   console.log('友達追加処理開始', { lineUserId, name: profile.displayName });
 
@@ -95,6 +106,22 @@ async function handleFollow(event: any) {
     console.error('profiles登録失敗:', err);
   }
 }
+
+async function getProfileWithRetry(userId: string, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const profile = await client.getProfile(userId);
+      return profile;
+    } catch (err: any) {
+      console.error(`getProfile リトライ${attempt}/${maxRetries}失敗:`, err.message);
+      if (attempt === maxRetries) throw err;
+      await new Promise(r => setTimeout(r, 1000 * attempt)); // 1秒、2秒、3秒待機
+    }
+  }
+  throw new Error('getProfile failed after retries');
+}
+
+
 
 // メッセージ受信時（メニュー表示など）
 async function handleMessage(event: any) {
