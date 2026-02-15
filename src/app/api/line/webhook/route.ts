@@ -22,6 +22,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
+// POSTハンドラ
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const signature = req.headers.get('x-line-signature') || '';
@@ -33,51 +34,43 @@ export async function POST(req: NextRequest) {
   const parsed = JSON.parse(body);
   const events = parsed.events;
 
-  // イベントごとに即返事（5秒以内必須）
-  for (const event of events) {
-    if (event.replyToken) {
+  // イベントごとに即返事（replyTokenは1回しか使えない）
+  const replyPromises = events.map(async (event: { replyToken: any; type: any; }) => {
+    if (!event.replyToken) return;
+
+    try {
       await client.replyMessage({
         replyToken: event.replyToken,
         messages: [{ type: 'text', text: '処理中です...！' }],
       });
+      console.log('即返事成功:', event.type);
+    } catch (replyErr) {
+      console.error('即返事失敗:', replyErr);
     }
-  }
-// 友達追加だけ遅延実行
-Promise.all(events.map((event: { type: string; }) => {
-  if (event.type === 'follow') {
-    return handleFollowDelayed(event);
-  }
-})).catch(err => console.error('遅延処理エラー:', err));
-  // 重い処理は完全に別スレッド（Promiseで投げて即return）
-  Promise.all(events.map((event: any) => processEvent(event))).catch(err => {
-    console.error('非同期処理エラー:', err);
+  });
+
+  await Promise.all(replyPromises);
+
+  // 本処理は完全に非同期で後回し（replyToken使わない）
+  Promise.all(events.map(processEvent)).catch(err => {
+    console.error('非同期処理全体エラー:', err);
   });
 
   return NextResponse.json({ status: 'OK' });
 }
 
-async function handleFollowDelayed(event: any) {
-  try {
-    const lineUserId = event.source.userId;
-    const profile = await getProfileWithRetry(lineUserId);
-    // 以降の処理...
-  } catch (err) {
-    console.error('遅延handleFollowエラー:', err);
-  }
-}
-
-// 個別イベント処理（非同期）
+// イベント処理（replyToken使わない）
 async function processEvent(event: any) {
   try {
     if (event.type === 'follow') {
-      await handleFollow(event);
+      await handleFollow(event); // replyTokenなしでDB登録だけ
     } else if (event.type === 'message') {
       await handleMessage(event);
     } else if (event.type === 'postback') {
       await handlePostback(event);
     }
   } catch (err) {
-    console.error('イベント処理エラー:', event.type, err);
+    console.error('processEventエラー:', event.type, err);
   }
 }
 
