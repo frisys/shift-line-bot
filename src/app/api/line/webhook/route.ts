@@ -79,7 +79,7 @@ async function handleFollow(event: any) {
   const lineUserId = event.source.userId;
   console.log('友達追加イベント受信！ユーザーID:', lineUserId);
   // const profile = await getProfileWithRetry(lineUserId);
-  const profile = await getProfileSafe(lineUserId);
+  const profile = await client.getProfile(lineUserId);
 
   console.log('友達追加処理開始', { lineUserId, name: profile.displayName });
 
