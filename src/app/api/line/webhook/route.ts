@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
 
 // イベント処理（replyToken使わない）
 async function processEvent(event: any) {
+  console.log('イベント処理開始:', event.type, 'ユーザーID:', event.source.userId);
   try {
     if (event.type === 'follow') {
       await handleFollow(event); // replyTokenなしでDB登録だけ
