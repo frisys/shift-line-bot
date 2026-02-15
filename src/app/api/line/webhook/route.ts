@@ -33,24 +33,33 @@ export async function POST(req: NextRequest) {
   const parsed = JSON.parse(body);
   const events = parsed.events;
 
+  // まず全イベントに即返事（5秒以内）
   for (const event of events) {
-    if (event.type === 'follow') {
-      console.log('友達追加イベント検出');
-      await handleFollow(event);
-    } else if (event.type === 'postback') {
-      console.log('Postbackイベント検出');
-      await handlePostback(event);
-    } else if (event.type === 'message') {
-      console.log('メッセージイベント検出');
-      await handleMessage(event);
+    if (event.replyToken) {
+      await client.replyMessage({
+        replyToken: event.replyToken,
+        messages: [{ type: 'text', text: '処理中です...！' }],
+      });
     }
   }
 
-  return NextResponse.json({ status: 'OK' }, {
-    headers: {
-      'Cache-Control': 'no-store'
-    },
-  });
+  // 重い処理は非同期で後回し
+  processEventsAsync(events).catch(err => console.error('非同期処理エラー:', err));
+
+  return NextResponse.json({ status: 'OK' });
+}
+
+// 非同期処理関数
+async function processEventsAsync(events: any[]) {
+  for (const event of events) {
+    if (event.type === 'follow') {
+      await handleFollow(event);
+    } else if (event.type === 'message') {
+      await handleMessage(event);
+    } else if (event.type === 'postback') {
+      await handlePostback(event);
+    }
+  }
 }
 
 // 友達追加時の処理
