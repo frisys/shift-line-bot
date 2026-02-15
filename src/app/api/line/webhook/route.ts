@@ -79,7 +79,10 @@ async function handleFollow(event: any) {
   const lineUserId = event.source.userId;
   console.log('友達追加イベント受信！ユーザーID:', lineUserId);
   // const profile = await getProfileWithRetry(lineUserId);
-  const profile = await client.getProfile(lineUserId);
+  const profile = await client.getProfile(lineUserId).catch(err => {
+    console.error('getProfile失敗:', err);
+    return { displayName: '不明なユーザー' }; // 失敗しても処理続行
+  });
 
   console.log('友達追加処理開始', { lineUserId, name: profile.displayName });
 
