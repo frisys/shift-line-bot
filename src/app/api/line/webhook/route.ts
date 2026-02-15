@@ -33,25 +33,31 @@ export async function POST(req: NextRequest) {
   const parsed = JSON.parse(body);
   const events = parsed.events;
 
-  // まず全イベントに即返事（5秒以内）
+  // イベントごとに即返事（5秒以内必須）
   for (const event of events) {
-    if (event.replyToken && event.type === 'message') {
-      await client.replyMessage({
-        replyToken: event.replyToken,
-        messages: [{ type: 'text', text: '処理中です...！' }],
-      });
+    if (event.replyToken) {
+      try {
+        await client.replyMessage({
+          replyToken: event.replyToken,
+          messages: [{ type: 'text', text: '処理中です...！' }],
+        });
+      } catch (replyErr) {
+        console.error('即返事エラー:', replyErr);
+      }
     }
   }
 
-  // 重い処理は非同期で後回し
-  processEventsAsync(events).catch(err => console.error('非同期処理エラー:', err));
+  // 重い処理は完全に別スレッド（Promiseで投げて即return）
+  Promise.all(events.map((event: any) => processEvent(event))).catch(err => {
+    console.error('非同期処理エラー:', err);
+  });
 
   return NextResponse.json({ status: 'OK' });
 }
 
-// 非同期処理関数
-async function processEventsAsync(events: any[]) {
-  for (const event of events) {
+// 個別イベント処理（非同期）
+async function processEvent(event: any) {
+  try {
     if (event.type === 'follow') {
       await handleFollow(event);
     } else if (event.type === 'message') {
@@ -59,6 +65,8 @@ async function processEventsAsync(events: any[]) {
     } else if (event.type === 'postback') {
       await handlePostback(event);
     }
+  } catch (err) {
+    console.error('イベント処理エラー:', event.type, err);
   }
 }
 
@@ -67,40 +75,24 @@ async function handleFollow(event: any) {
   const lineUserId = event.source.userId;
   const profile = await client.getProfile(lineUserId);
 
-  console.log('友達追加！LINE User ID:', lineUserId);
-  console.log('名前:', profile.displayName);
+  console.log('友達追加処理開始', { lineUserId, name: profile.displayName });
 
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('profiles')
       .upsert({
         line_user_id: lineUserId,
-        name: profile.displayName,
+        name: profile.displayName || '未設定',
       }, {
         onConflict: 'line_user_id',
-      })
-      .select()
-      .single();
+        ignoreDuplicates: false,
+      });
 
-    if (error) {
-      console.error('profiles upsertエラー:', error);
-      throw error;
-    }
+    if (error) throw error;
 
-    console.log('profiles登録成功:', data);
-
-    // 挨拶メッセージ
-    await client.replyMessage({
-      replyToken: event.replyToken,
-      messages: [
-        {
-          type: 'text',
-          text: `こんにちは、${profile.displayName}さん！\n\nあなたの店舗コードを入力してください。\n例: ABC123\n（店長からもらった6桁のコードです）`,
-        },
-      ],
-    });
+    console.log('profiles登録成功');
   } catch (err) {
-    console.error('handleFollowエラー:', err);
+    console.error('profiles登録失敗:', err);
   }
 }
 
