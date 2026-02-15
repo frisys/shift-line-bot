@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
   // まず全イベントに即返事（5秒以内）
   for (const event of events) {
-    if (event.replyToken) {
+    if (event.replyToken && event.type === 'message') {
       await client.replyMessage({
         replyToken: event.replyToken,
         messages: [{ type: 'text', text: '処理中です...！' }],
