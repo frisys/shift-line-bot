@@ -14,7 +14,7 @@ function validateSignature(body: string, signature: string) {
 }
 
 const client = new messagingApi.MessagingApiClient({
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
+  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!
 });
 
 const supabase = createClient(
@@ -49,7 +49,11 @@ export async function POST(req: NextRequest) {
     console.log('イベント処理開始:', event.type, 'ユーザーID:', event.source.userId);
     if (event.type === 'follow') {
       console.log('友達追加イベント:', event.source.userId);
-      await handleFollow(event);
+      setTimeout(() => {
+          handleFollow(event).catch(err => {
+            console.error('遅延処理エラー:', err);
+          });
+        }, 100); // 100ms後に実行（即返事後に）
     } else if (event.type === 'message') {
       console.log('メッセージイベント:', event.source.userId, '内容:', event.message.text);
       await handleMessage(event);
@@ -68,7 +72,7 @@ async function handleFollow(event: any) {
 
   let profile;
   try {
-    profile = await client.getProfile(lineUserId);
+    profile = await getProfileWithRetry(lineUserId);
   } catch (err) {
     console.error('getProfile完全失敗:', err);
     // フォールバックで仮の名前を使う
@@ -83,7 +87,36 @@ async function handleFollow(event: any) {
     console.log('profiles登録成功');
 }
 
+// 専用リトライ関数（これをグローバルに置く）
+async function getProfileWithRetry(userId: string) {
+  const maxRetries = 3;
+  const timeoutMs = 8000; // 8秒に延長
 
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`getProfile 試行 ${attempt}/${maxRetries}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      const profile = await client.getProfile(userId, {
+        signal: controller.signal, // タイムアウト制御
+      });
+
+      clearTimeout(timeoutId);
+      console.log('getProfile成功:', profile.displayName);
+      return profile;
+    } catch (err: any) {
+      console.error(`getProfile失敗（試行${attempt}）:`, err.message || err);
+      if (err.name === 'AbortError') {
+        console.error('タイムアウト発生');
+      }
+      if (attempt === maxRetries) {
+        throw err;
+      }
+      await new Promise(r => setTimeout(r, 2000 * attempt)); // 2秒、4秒、6秒待機
+    }
+  }
+}
 
 // メッセージ受信時（メニュー表示など）
 async function handleMessage(event: any) {
