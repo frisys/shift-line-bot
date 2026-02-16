@@ -49,10 +49,7 @@ export async function POST(req: NextRequest) {
     console.log('イベント処理開始:', event.type, 'ユーザーID:', event.source.userId);
     if (event.type === 'follow') {
       console.log('友達追加イベント:', event.source.userId);
-      await handleFollow(event); // replyTokenなしでDB登録だけ
-      // setTimeout(() => handleFollow(event).catch(err => {
-      //   console.error('遅延handleFollowエラー:', err);
-      // }), 100); // 100ms遅延（即返事後に実行）
+      await handleFollow(event);
     } else if (event.type === 'message') {
       console.log('メッセージイベント:', event.source.userId, '内容:', event.message.text);
       await handleMessage(event);
@@ -65,58 +62,13 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ status: 'OK' });
 }
 
-// イベント処理（replyToken使わない）
-async function processEvent(event: any) {
-  console.log('イベント処理開始:', event.type, 'ユーザーID:', event.source.userId);
-  try {
-    if (event.type === 'follow') {
-      await handleFollow(event); // replyTokenなしでDB登録だけ
-    } else if (event.type === 'message') {
-      await handleMessage(event);
-    } else if (event.type === 'postback') {
-      await handlePostback(event);
-    }
-  } catch (err) {
-    console.error('processEventエラー:', event.type, err);
-  }
-}
-
-// 専用リトライ関数（これをグローバルに置く）
-async function getProfileWithRetry(userId: string) {
-  const maxRetries = 3;
-  const timeoutMs = 8000; // 8秒に延長
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`getProfile 試行 ${attempt}/${maxRetries}`);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-      const profile = await client.getProfile(userId);
-
-      clearTimeout(timeoutId);
-      console.log('getProfile成功:', profile.displayName);
-      return profile;
-    } catch (err: any) {
-      console.error(`getProfile失敗（試行${attempt}）:`, err.message || err);
-      if (err.name === 'AbortError') {
-        console.error('タイムアウト発生');
-      }
-      if (attempt === maxRetries) {
-        throw err;
-      }
-      await new Promise(r => setTimeout(r, 2000 * attempt)); // 2秒、4秒、6秒待機
-    }
-  }
-}
-
 // 友達追加時の処理
 async function handleFollow(event: any) {
   const lineUserId = event.source.userId;
 
   let profile;
   try {
-    profile = await getProfileWithRetry(lineUserId);
+    profile = await client.getProfile(lineUserId);
   } catch (err) {
     console.error('getProfile完全失敗:', err);
     // フォールバックで仮の名前を使う
@@ -132,28 +84,6 @@ async function handleFollow(event: any) {
 }
 
 
-async function getProfileSafe(userId: string) {
-  const maxRetries = 2;
-  let lastError;
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`getProfile 試行${attempt}/${maxRetries}`);
-      const profile = await client.getProfile(userId);
-      console.log('getProfile成功:', profile.displayName);
-      return profile;
-    } catch (err) {
-      lastError = err;
-      console.error(`getProfile失敗（試行${attempt}）:`, err instanceof Error ? err.message : String(err));
-      if (attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, 1500)); // 1.5秒待機
-      }
-    }
-  }
-
-  console.error('getProfile完全失敗:', lastError);
-  throw lastError;
-}
 
 // メッセージ受信時（メニュー表示など）
 async function handleMessage(event: any) {
