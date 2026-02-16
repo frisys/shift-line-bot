@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   const events = parsed.events;
 
   for (const event of events) {
-    if (event.replyToken) {
+    if (event.replyToken && event.type === 'message' && event.message.type === 'text') {
       console.log('イベント受信:', event.type, 'ユーザーID:', event.source.userId);
       await client.replyMessage({
         replyToken: event.replyToken,
