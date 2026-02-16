@@ -49,9 +49,10 @@ export async function POST(req: NextRequest) {
     console.log('イベント処理開始:', event.type, 'ユーザーID:', event.source.userId);
     if (event.type === 'follow') {
       console.log('友達追加イベント:', event.source.userId);
-      setTimeout(() => handleFollow(event).catch(err => {
-        console.error('遅延handleFollowエラー:', err);
-      }), 100); // 100ms遅延（即返事後に実行）
+      await handleFollow(event); // replyTokenなしでDB登録だけ
+      // setTimeout(() => handleFollow(event).catch(err => {
+      //   console.error('遅延handleFollowエラー:', err);
+      // }), 100); // 100ms遅延（即返事後に実行）
     } else if (event.type === 'message') {
       console.log('メッセージイベント:', event.source.userId, '内容:', event.message.text);
       await handleMessage(event);
