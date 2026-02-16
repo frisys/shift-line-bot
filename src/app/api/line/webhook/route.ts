@@ -83,24 +83,16 @@ async function processEvent(event: any) {
 
 // 友達追加時の処理
 async function handleFollow(event: any) {
-  const lineUserId = event.source.userId;
-  console.log('友達追加イベント受信！ユーザーID:', lineUserId);
-  // const profile = await getProfileWithRetry(lineUserId);
-  const profile = await client.getProfile(lineUserId).then(profile => {
-    console.log('getProfile成功:', profile.displayName);
-    return profile;
-  }).catch(err => {
-    console.error('getProfile失敗:', err instanceof Error ? err.message : String(err));
-    return { displayName: '未設定' }; // プロフィール取得失敗時のデフォルト値
-  });
+    const userId = event.source.userId;
+    const profile = await client.getProfile(userId);
 
-  console.log('友達追加処理開始', { lineUserId, name: profile.displayName });
+  console.log('友達追加処理開始', { userId, name: profile.displayName });
 
   try {
     const { error } = await supabase
       .from('profiles')
       .upsert({
-        line_user_id: lineUserId,
+        line_user_id: userId,
         name: profile.displayName || '未設定',
       }, {
         onConflict: 'line_user_id',
