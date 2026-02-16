@@ -81,47 +81,56 @@ async function processEvent(event: any) {
   }
 }
 
-// 友達追加時の処理
-async function handleFollow(event: any) {
-    const userId = event.source.userId;
-    const profile = await client.getProfile(userId);
+// 専用リトライ関数（これをグローバルに置く）
+async function getProfileWithRetry(userId: string) {
+  const maxRetries = 3;
+  const timeoutMs = 8000; // 8秒に延長
 
-  console.log('友達追加処理開始', { userId, name: profile.displayName });
-
-  try {
-    const { error } = await supabase
-      .from('profiles')
-      .upsert({
-        line_user_id: userId,
-        name: profile.displayName || '未設定',
-      }, {
-        onConflict: 'line_user_id',
-        ignoreDuplicates: false,
-      });
-
-    if (error) throw error;
-
-    console.log('profiles登録成功');
-  } catch (err) {
-    console.error('profiles登録失敗:', err);
-  }
-}
-
-async function getProfileWithRetry(userId: string, maxRetries = 3) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`getProfile リトライ${attempt}開始: ユーザーID ${userId}`);
+      console.log(`getProfile 試行 ${attempt}/${maxRetries}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
       const profile = await client.getProfile(userId);
-      console.log(`getProfile リトライ${attempt}成功:`, profile);
+
+      clearTimeout(timeoutId);
+      console.log('getProfile成功:', profile.displayName);
       return profile;
     } catch (err: any) {
-      console.error(`getProfile リトライ${attempt}/${maxRetries}失敗:`, err.message);
-      if (attempt === maxRetries) throw err;
-      await new Promise(r => setTimeout(r, 1000 * attempt)); // 1秒、2秒、3秒待機
+      console.error(`getProfile失敗（試行${attempt}）:`, err.message || err);
+      if (err.name === 'AbortError') {
+        console.error('タイムアウト発生');
+      }
+      if (attempt === maxRetries) {
+        throw err;
+      }
+      await new Promise(r => setTimeout(r, 2000 * attempt)); // 2秒、4秒、6秒待機
     }
   }
-  throw new Error('getProfile failed after retries');
 }
+
+// 友達追加時の処理
+async function handleFollow(event: any) {
+  const lineUserId = event.source.userId;
+
+  let profile;
+  try {
+    profile = await getProfileWithRetry(lineUserId);
+  } catch (err) {
+    console.error('getProfile完全失敗:', err);
+    // フォールバックで仮の名前を使う
+    profile = { displayName: 'ゲストユーザー' };
+  }
+
+  await supabase.from('profiles').upsert({
+    line_user_id: lineUserId,
+    name: profile!.displayName || '未設定',
+  }, { onConflict: 'line_user_id' });
+
+    console.log('profiles登録成功');
+}
+
 
 async function getProfileSafe(userId: string) {
   const maxRetries = 2;
