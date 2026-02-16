@@ -98,9 +98,7 @@ async function getProfileWithRetry(userId: string) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-      const profile = await client.getProfile(userId, {
-        signal: controller.signal, // タイムアウト制御
-      });
+      const profile = await client.getProfile(userId);
 
       clearTimeout(timeoutId);
       console.log('getProfile成功:', profile.displayName);
