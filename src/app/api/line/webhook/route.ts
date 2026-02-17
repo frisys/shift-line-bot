@@ -63,7 +63,14 @@ export async function POST(req: NextRequest) {
       await handleFollow(lineUserId, profile, event.replyToken);
     } else if (event.type === 'message') {
       console.log('メッセージイベント:', lineUserId, '内容:', event.message.text);
-      await handleMessage(lineUserId, event.message.text.trim(), event.replyToken);
+      if (event.replyToken && event.type === 'message' && event.message.type === 'text') {
+        await client.replyMessage({
+          replyToken: event.replyToken,
+          messages: [{ type: 'text', text: '処理中です...！' }],
+        });
+        console.log('即時返信完了:', event.type, 'ユーザーID:', lineUserId);
+      }
+      await handleMessage(lineUserId, event.message.text.trim());
     } else if (event.type === 'postback') {
       console.log('ポストバックイベント:', lineUserId, 'データ:', event.postback.data);
       await handlePostback(event);
@@ -111,17 +118,17 @@ async function handleFollow(lineUserId: string, profile: any, replyToken: string
 }
 
 // メッセージ受信時（メニュー表示など）
-async function handleMessage(lineUserId: string, text: string, replyToken: string) {
+async function handleMessage(lineUserId: string, text: string) {
   // 店舗番号っぽい入力（英数4〜10文字くらい）を検知
   if (/^[A-Za-z0-9-]{4,10}$/.test(text)) {
-    await handleStoreCodeInput(lineUserId, text, replyToken);
+    await handleStoreCodeInput(lineUserId, text);
   } else {
     // 通常メッセージ（希望提出など）
     if (text.includes('希望') || text.includes('シフト')) {
-      await sendShiftMenu(replyToken);
+      await sendShiftMenu(lineUserId);
     } else {
-      await client.replyMessage({
-        replyToken: replyToken,
+      await client.pushMessage({
+        to: lineUserId,
         messages: [{ type: 'text', text: '「シフト希望提出」と送るとメニューが出ます！' }],
       });
     }
@@ -129,7 +136,7 @@ async function handleMessage(lineUserId: string, text: string, replyToken: strin
 }
 
 // 店舗番号入力処理
-async function handleStoreCodeInput(lineUserId: string, code: string, replyToken: string) {
+async function handleStoreCodeInput(lineUserId: string, code: string) {
   const trimmedCode = code.trim(); // スペース除去
   const upperCode = trimmedCode.toUpperCase();
   console.log('店舗コード入力受信！入力値:', upperCode);
@@ -146,8 +153,8 @@ async function handleStoreCodeInput(lineUserId: string, code: string, replyToken
 
   if (error || !store) {
     console.error('店舗検索失敗:', error?.message || 'レコードなし');
-    await client.replyMessage({
-      replyToken,
+    await client.pushMessage({
+      to: lineUserId,
       messages: [{ type: 'text', text: '店舗コードが見つかりませんでした。\n入力したコード: ' + trimmedCode + '\nもう一度確認してください！' }],
     });
     return;
@@ -170,15 +177,15 @@ async function handleStoreCodeInput(lineUserId: string, code: string, replyToken
 
   if (storesError) {
     console.error('user_stores登録エラー:', storesError);
-    await client.replyMessage({
-      replyToken,
+    await client.pushMessage({
+      to: lineUserId,
       messages: [{ type: 'text', text: '登録に失敗しました。店舗に連絡してください。' }],
     });
     return;
   }
 
-  await client.replyMessage({
-    replyToken,
+  await client.pushMessage({
+    to: lineUserId,
     messages: [
       { type: 'text', text: '店舗登録完了しました！' },
       { type: 'text', text: 'これからシフト希望を提出できます。メニューから選んでください！' },
@@ -186,7 +193,7 @@ async function handleStoreCodeInput(lineUserId: string, code: string, replyToken
   });
 
   // 希望提出メニュー送る
-  await sendShiftMenu(replyToken);
+  await sendShiftMenu(lineUserId);
 }
 
 // postback処理（希望提出）
@@ -223,7 +230,7 @@ async function handlePostback(event: any) {
 }
 
 // Flex Messageメニュー送信例
-async function sendShiftMenu(replyToken: string) {
+async function sendShiftMenu(lineUserId: string) {
   const flexMessage: messagingApi.FlexMessage = {
     type: 'flex',
     altText: 'シフト希望提出',
@@ -254,8 +261,8 @@ async function sendShiftMenu(replyToken: string) {
     },
   };
 
-    await client.replyMessage({
-        replyToken: replyToken,
+    await client.pushMessage({
+        to: lineUserId,
         messages: [flexMessage],
     });
 }
