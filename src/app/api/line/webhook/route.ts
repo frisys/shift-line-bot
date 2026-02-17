@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     console.log('イベント処理開始:', event.type, 'ユーザーID:', lineUserId);
     if (event.type === 'follow') {
       console.log('友達追加イベント:', lineUserId);
-      handleFollow(lineUserId, profile);
+      await handleFollow(lineUserId, profile);
     } else if (event.type === 'message') {
       console.log('メッセージイベント:', lineUserId, '内容:', event.message.text);
       await handleMessage(lineUserId, event.message.text.trim(), event.replyToken);
@@ -70,10 +70,10 @@ export async function POST(req: NextRequest) {
 }
 
 // 友達追加時の処理
-function handleFollow(lineUserId: string, profile: any) {
+async function handleFollow(lineUserId: string, profile: any) {
 
   try {
-    supabase.from('profiles').upsert({
+    await supabase.from('profiles').upsert({
       line_user_id: lineUserId,
       name: profile!.displayName || '未設定',
     }, { onConflict: 'line_user_id' });
