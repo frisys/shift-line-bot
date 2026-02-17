@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { messagingApi } from '@line/bot-sdk';
+import { send } from 'process';
 
 // 署名検証
 function validateSignature(body: string, signature: string) {
@@ -56,8 +57,10 @@ export async function POST(req: NextRequest) {
 
     console.log('イベント処理開始:', event.type, 'ユーザーID:', lineUserId);
     if (event.type === 'follow') {
-      console.log('友達追加イベント:', lineUserId);
-      await handleFollow(lineUserId, profile);
+      console.log('友達追加イベント受信');
+      console.log('LINE User ID:', lineUserId);
+      console.log('表示名:', profile.displayName);
+      await handleFollow(lineUserId, profile, event.replyToken);
     } else if (event.type === 'message') {
       console.log('メッセージイベント:', lineUserId, '内容:', event.message.text);
       await handleMessage(lineUserId, event.message.text.trim(), event.replyToken);
@@ -70,47 +73,41 @@ export async function POST(req: NextRequest) {
 }
 
 // 友達追加時の処理
-async function handleFollow(lineUserId: string, profile: any) {
+async function handleFollow(lineUserId: string, profile: any, replyToken: string) {
 
   try {
-    await supabase.from('profiles').upsert({
+    const { data, error } =await supabase
+    .from('profiles')
+    .upsert({
       line_user_id: lineUserId,
       name: profile!.displayName || '未設定',
-    }, { onConflict: 'line_user_id' });
-  } catch (err) {
-    console.error('profiles登録エラー:', err);
-    return;
-  }
-  console.log('profiles登録成功');
-}
+    }, { 
+      onConflict: 'line_user_id',
+      ignoreDuplicates: false
+    })
+    .select()
+    .single();
 
-// 専用リトライ関数（これをグローバルに置く）
-async function getProfileWithRetry(userId: string) {
-  const maxRetries = 3;
-  const timeoutMs = 8000; // 8秒に延長
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`getProfile 試行 ${attempt}/${maxRetries}`);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-      const profile = await client.getProfile(userId);
-
-      clearTimeout(timeoutId);
-      console.log('getProfile成功:', profile.displayName);
-      return profile;
-    } catch (err: any) {
-      console.error(`getProfile失敗（試行${attempt}）:`, err.message || err);
-      if (err.name === 'AbortError') {
-        console.error('タイムアウト発生');
-      }
-      if (attempt === maxRetries) {
-        throw err;
-      }
-      await new Promise(r => setTimeout(r, 2000 * attempt)); // 2秒、4秒、6秒待機
+    if (error) {
+      console.error('profiles upsertエラー:', error);
+      return;
     }
+
+    console.log('登録成功！inserted data:', data);
+  } catch (err) {
+    console.error('handleFollow全体エラー:', err);
   }
+
+  // 挨拶メッセージ（必ず最後に）
+  await client.replyMessage({
+    replyToken: replyToken,
+    messages: [
+      {
+        type: 'text',
+        text: `こんにちは、${profile.displayName}さん！\n\nあなたの店舗コードを入力してください。\n例: ABC123\n（店長からもらった6桁のコードです）`,
+      },
+    ],
+  });
 }
 
 // メッセージ受信時（メニュー表示など）
