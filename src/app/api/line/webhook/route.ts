@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     console.log('イベント処理開始:', event.type, 'ユーザーID:', lineUserId);
     if (event.type === 'follow') {
       console.log('友達追加イベント:', lineUserId);
-      await handleFollow(lineUserId, profile);
+      handleFollow(lineUserId, profile);
     } else if (event.type === 'message') {
       console.log('メッセージイベント:', lineUserId, '内容:', event.message.text);
       await handleMessage(lineUserId, event.message.text.trim(), event.replyToken);
@@ -74,13 +74,17 @@ export async function POST(req: NextRequest) {
 }
 
 // 友達追加時の処理
-async function handleFollow(lineUserId: string, profile: any) {
+function handleFollow(lineUserId: string, profile: any) {
 
-  await supabase.from('profiles').upsert({
-    line_user_id: lineUserId,
-    name: profile!.displayName || '未設定',
-  }, { onConflict: 'line_user_id' });
-
+  try {
+    supabase.from('profiles').upsert({
+      line_user_id: lineUserId,
+      name: profile!.displayName || '未設定',
+    }, { onConflict: 'line_user_id' });
+  } catch (err) {
+    console.error('profiles登録エラー:', err);
+    return;
+  }
   console.log('profiles登録成功');
 }
 
