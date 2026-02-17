@@ -34,9 +34,6 @@ export async function POST(req: NextRequest) {
   const parsed = JSON.parse(body);
   const events = parsed.events;
 
-
-
-  
   for (const event of events) {
     const lineUserId = event.source.userId;
 
@@ -45,18 +42,17 @@ export async function POST(req: NextRequest) {
       profile = await client.getProfile(lineUserId);
     } catch (err) {
       console.error('getProfile完全失敗:', err);
-      // フォールバックで仮の名前を使う
       profile = { displayName: 'ゲストユーザー' };
     }
 
-    if (event.replyToken && event.type === 'message' && event.message.type === 'text') {
-      console.log('イベント受信:', event.type, 'ユーザーID:', lineUserId);
-      await client.replyMessage({
-        replyToken: event.replyToken,
-        messages: [{ type: 'text', text: '処理中です...！' }],
-      });
-      console.log('即時返信完了:', event.type, 'ユーザーID:', lineUserId);
-    }
+    // if (event.replyToken && event.type === 'message' && event.message.type === 'text') {
+    //   console.log('イベント受信:', event.type, 'ユーザーID:', lineUserId);
+    //   await client.replyMessage({
+    //     replyToken: event.replyToken,
+    //     messages: [{ type: 'text', text: '処理中です...！' }],
+    //   });
+    //   console.log('即時返信完了:', event.type, 'ユーザーID:', lineUserId);
+    // }
 
     console.log('イベント処理開始:', event.type, 'ユーザーID:', lineUserId);
     if (event.type === 'follow') {
