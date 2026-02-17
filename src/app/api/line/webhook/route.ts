@@ -61,11 +61,7 @@ export async function POST(req: NextRequest) {
     console.log('イベント処理開始:', event.type, 'ユーザーID:', lineUserId);
     if (event.type === 'follow') {
       console.log('友達追加イベント:', lineUserId);
-      setTimeout(() => {
-          handleFollow(lineUserId, profile).catch(err => {
-            console.error('遅延処理エラー:', err);
-          });
-        }, 100); // 100ms後に実行（即返事後に）
+      await handleFollow(lineUserId, profile);
     } else if (event.type === 'message') {
       console.log('メッセージイベント:', lineUserId, '内容:', event.message.text);
       await handleMessage(lineUserId, event.message.text.trim(), event.replyToken);
