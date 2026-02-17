@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { messagingApi } from '@line/bot-sdk';
-import { send } from 'process';
 
 // 署名検証
 function validateSignature(body: string, signature: string) {
@@ -46,21 +45,12 @@ export async function POST(req: NextRequest) {
       profile = { displayName: 'ゲストユーザー' };
     }
 
-    // if (event.replyToken && event.type === 'message' && event.message.type === 'text') {
-    //   console.log('イベント受信:', event.type, 'ユーザーID:', lineUserId);
-    //   await client.replyMessage({
-    //     replyToken: event.replyToken,
-    //     messages: [{ type: 'text', text: '処理中です...！' }],
-    //   });
-    //   console.log('即時返信完了:', event.type, 'ユーザーID:', lineUserId);
-    // }
-
     console.log('イベント処理開始:', event.type, 'ユーザーID:', lineUserId);
     if (event.type === 'follow') {
       console.log('友達追加イベント受信');
       console.log('LINE User ID:', lineUserId);
       console.log('表示名:', profile.displayName);
-      await handleFollow(lineUserId, profile, event.replyToken);
+      await handleFollow(event, profile);
     } else if (event.type === 'message') {
       console.log('メッセージイベント:', lineUserId, '内容:', event.message.text);
       if (event.replyToken && event.type === 'message' && event.message.type === 'text') {
@@ -70,7 +60,7 @@ export async function POST(req: NextRequest) {
         });
         console.log('即時返信完了:', event.type, 'ユーザーID:', lineUserId);
       }
-      await handleMessage(lineUserId, event.message.text.trim());
+      await handleMessage(event);
     } else if (event.type === 'postback') {
       console.log('ポストバックイベント:', lineUserId, 'データ:', event.postback.data);
       await handlePostback(event);
@@ -80,7 +70,9 @@ export async function POST(req: NextRequest) {
 }
 
 // 友達追加時の処理
-async function handleFollow(lineUserId: string, profile: any, replyToken: string) {
+async function handleFollow(event: any, profile: any) {
+  const lineUserId = event.source.userId;
+  const replyToken = event.replyToken;
 
   try {
     const { data, error } =await supabase
@@ -118,7 +110,9 @@ async function handleFollow(lineUserId: string, profile: any, replyToken: string
 }
 
 // メッセージ受信時（メニュー表示など）
-async function handleMessage(lineUserId: string, text: string) {
+async function handleMessage(event: any) {
+  const lineUserId = event.source.userId;
+  const text = event.message.text.trim();
   // 店舗番号っぽい入力（英数4〜10文字くらい）を検知
   if (/^[A-Za-z0-9-]{4,10}$/.test(text)) {
     await handleStoreCodeInput(lineUserId, text);
@@ -188,44 +182,67 @@ async function handleStoreCodeInput(lineUserId: string, code: string) {
     to: lineUserId,
     messages: [
       { type: 'text', text: '店舗登録完了しました！' },
-      { type: 'text', text: 'これからシフト希望を提出できます。メニューから選んでください！' },
+      { type: 'text', text: 'これからシフト希望を提出できます。下のメニューから「シフト希望提出」をタップしてください！' },
     ],
   });
 
-  // 希望提出メニュー送る
-  await sendShiftMenu(lineUserId);
+  // リッチメニュー適用（メニューIDを環境変数から取る）
+  await client.setDefaultRichMenu(process.env.LINE_RICH_MENU_ID!);
 }
 
 // postback処理（希望提出）
 async function handlePostback(event: any) {
   const data = event.postback.data;
   const params = new URLSearchParams(data);
-
   const action = params.get('action');
-  if (action === 'submit_preference') {
+
+  if (action === 'シフト提出') {
+    await sendShiftMenu(event.source.userId); // pushMessageでFlex送る
+  } else if (action === 'シフト確認') {
+    // 自分の希望一覧を表示（後で実装）
+  } else if (action === '店舗切替') {
+    await handleChangeStore(event.source.userId, event.replyToken);
+  } else if (action === 'submit_preference') {
     const date = params.get('date');
     const status = params.get('status');
     const timeSlot = params.get('time_slot');
+  } else if (action === 'switch_store') {
+    const storeId = params.get('store_id');
+    const lineUserId = event.source.userId;
 
-    if (!date || !status) return;
+    if (!storeId) {
+      await client.replyMessage({
+        replyToken: event.replyToken,
+        messages: [{ type: 'text', text: '店舗情報が正しくありません。もう一度お試しください。' }],
+      });
+      return;
+    }
 
-    await supabase.from('shift_preferences').upsert({
-      user_id: event.source.userId,
-      store_id: '固定店舗IDか後で選択', // ← 複数店舗対応なら後で実装
-      shift_date: date,
-      status,
-      time_slot: timeSlot || null,
-      note: null,
-    });
-    await client.replyMessage({
+    try {
+      const { error } = await supabase.from('user_stores').upsert({
+        user_id: lineUserId,
+        store_id: storeId,
+        role: 'staff',  // 必要に応じて変更
+      }, { onConflict: 'user_id, store_id' });
+
+      if (error) throw error;
+
+      await client.replyMessage({
         replyToken: event.replyToken,
         messages: [
-            {
+          {
             type: 'text',
-            text: `${date} の希望を${status}で登録しました！\nありがとうございます！`,
-            },
+            text: '店舗を切り替えました！\nこれからはこの店舗のシフト希望を提出できます。',
+          },
         ],
-    });
+      });
+    } catch (err) {
+      console.error('店舗切り替えエラー:', err);
+      await client.replyMessage({
+        replyToken: event.replyToken,
+        messages: [{ type: 'text', text: '切り替えに失敗しました。もう一度試してください。' }],
+      });
+    }
   }
 }
 
@@ -235,29 +252,29 @@ async function sendShiftMenu(lineUserId: string) {
     type: 'flex',
     altText: 'シフト希望提出',
     contents: {
-      type: 'bubble',
-      body: {
-        type: 'box',
-        layout: 'vertical',
-        contents: [
-          {
-            type: 'text',
-            text: 'シフト希望を提出',
-            weight: 'bold',
-            size: 'xl',
+      type: 'carousel',
+      contents: [
+        // 日付選択Flexのバブル複数
+        {
+          type: 'bubble',
+          body: {
+            type: 'box',
+            layout: 'vertical',
+            contents: [
+              { type: 'text', text: '希望日を選択', weight: 'bold', size: 'lg' },
+              {
+                type: 'button',
+                action: {
+                  type: 'postback',
+                  label: '2/15 (日)',
+                  data: 'action=select_date&date=2026-02-15',
+                },
+                style: 'primary',
+              },
+            ],
           },
-          {
-            type: 'button',
-            action: {
-              type: 'postback',
-              label: '◯ (出たい)',
-              data: 'action=submit_preference&date=2026-02-10&status=ok',
-            },
-            style: 'primary',
-          },
-          // △ × などのボタンも追加
-        ],
-      },
+        },
+      ],
     },
   };
 
@@ -265,4 +282,93 @@ async function sendShiftMenu(lineUserId: string) {
         to: lineUserId,
         messages: [flexMessage],
     });
+}
+
+async function getUserStores(lineUserId: string) {
+  const { data, error } = await supabase
+    .from('user_stores')
+    .select(`
+      store_id,
+      stores (name, store_code)
+    `)
+    .eq('user_id', lineUserId);
+
+  if (error) {
+    console.error('登録店舗取得エラー:', error);
+    return [];
+  }
+
+  return data.map((item: any) => ({
+    store_id: item.store_id,
+    name: item.stores?.name || '不明',
+    store_code: item.stores?.store_code || '不明',
+  }));
+}
+
+async function handleChangeStore(lineUserId: string, replyToken: string) {
+  const registeredStores = await getUserStores(lineUserId);
+
+  if (registeredStores.length === 0) {
+    await client.replyMessage({
+      replyToken,
+      messages: [
+        {
+          type: 'text',
+          text: '現在登録されている店舗はありません。\n新しい店舗コードを入力してください！',
+        },
+      ],
+    });
+    return;
+  }
+
+  // 登録店舗一覧をFlexで表示
+  const flexContents: messagingApi.FlexBubble[] = registeredStores.map(store => ({
+    type: 'bubble',
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      contents: [
+        {
+          type: 'text',
+          text: store.name,
+          weight: 'bold',
+          size: 'lg',
+        },
+        {
+          type: 'text',
+          text: `コード: ${store.store_code}`,
+          size: 'sm',
+          color: '#AAAAAA',
+        },
+        {
+          type: 'button',
+          action: {
+            type: 'postback',
+            label: 'この店舗に切り替え',
+            data: `action=switch_store&store_id=${store.store_id}`,
+          },
+          style: 'primary',
+          margin: 'md',
+        },
+      ],
+    },
+  }));
+
+  const flexMessage: messagingApi.FlexMessage = {
+    type: 'flex',
+    altText: '登録店舗選択',
+    contents: {
+      type: 'carousel',
+      contents: flexContents,
+    },
+  };
+
+  await client.replyMessage({
+    replyToken,
+    messages: [
+      { type: 'text', text: '登録済み店舗一覧です。切り替えたい店舗を選択してください。' },
+      flexMessage,
+      { type: 'text', text: '新規店舗を追加したい場合は、新しい店舗コードを入力してください。' },
+    ],
+  });
 }
