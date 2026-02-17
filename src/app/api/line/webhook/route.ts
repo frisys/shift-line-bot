@@ -34,57 +34,58 @@ export async function POST(req: NextRequest) {
   const parsed = JSON.parse(body);
   const events = parsed.events;
 
+
+
+  
   for (const event of events) {
+    const lineUserId = event.source.userId;
+
+    let profile;
+    try {
+      profile = await client.getProfile(lineUserId);
+    } catch (err) {
+      console.error('getProfile完全失敗:', err);
+      // フォールバックで仮の名前を使う
+      profile = { displayName: 'ゲストユーザー' };
+    }
+
     if (event.replyToken && event.type === 'message' && event.message.type === 'text') {
-      console.log('イベント受信:', event.type, 'ユーザーID:', event.source.userId);
+      console.log('イベント受信:', event.type, 'ユーザーID:', lineUserId);
       await client.replyMessage({
         replyToken: event.replyToken,
         messages: [{ type: 'text', text: '処理中です...！' }],
       });
-      console.log('即時返信完了:', event.type, 'ユーザーID:', event.source.userId);
+      console.log('即時返信完了:', event.type, 'ユーザーID:', lineUserId);
     }
-  }
 
-  events.forEach(async (event: any) => {
-    console.log('イベント処理開始:', event.type, 'ユーザーID:', event.source.userId);
+    console.log('イベント処理開始:', event.type, 'ユーザーID:', lineUserId);
     if (event.type === 'follow') {
-      console.log('友達追加イベント:', event.source.userId);
+      console.log('友達追加イベント:', lineUserId);
       setTimeout(() => {
-          handleFollow(event).catch(err => {
+          handleFollow(lineUserId, profile).catch(err => {
             console.error('遅延処理エラー:', err);
           });
         }, 100); // 100ms後に実行（即返事後に）
     } else if (event.type === 'message') {
-      console.log('メッセージイベント:', event.source.userId, '内容:', event.message.text);
-      await handleMessage(event);
+      console.log('メッセージイベント:', lineUserId, '内容:', event.message.text);
+      await handleMessage(lineUserId, event.message.text.trim(), event.replyToken);
     } else if (event.type === 'postback') {
-      console.log('ポストバックイベント:', event.source.userId, 'データ:', event.postback.data);
+      console.log('ポストバックイベント:', lineUserId, 'データ:', event.postback.data);
       await handlePostback(event);
     }
-  });
-
+  };
   return NextResponse.json({ status: 'OK' });
 }
 
 // 友達追加時の処理
-async function handleFollow(event: any) {
-  const lineUserId = event.source.userId;
-
-  let profile;
-  try {
-    profile = await getProfileWithRetry(lineUserId);
-  } catch (err) {
-    console.error('getProfile完全失敗:', err);
-    // フォールバックで仮の名前を使う
-    profile = { displayName: 'ゲストユーザー' };
-  }
+async function handleFollow(lineUserId: string, profile: any) {
 
   await supabase.from('profiles').upsert({
     line_user_id: lineUserId,
     name: profile!.displayName || '未設定',
   }, { onConflict: 'line_user_id' });
 
-    console.log('profiles登録成功');
+  console.log('profiles登録成功');
 }
 
 // 専用リトライ関数（これをグローバルに置く）
@@ -117,22 +118,17 @@ async function getProfileWithRetry(userId: string) {
 }
 
 // メッセージ受信時（メニュー表示など）
-async function handleMessage(event: any) {
-  if (event.message.type !== 'text') return;
-
-  const text = event.message.text.trim();
-  const lineUserId = event.source.userId;
-
+async function handleMessage(lineUserId: string, text: string, replyToken: string) {
   // 店舗番号っぽい入力（英数4〜10文字くらい）を検知
   if (/^[A-Za-z0-9-]{4,10}$/.test(text)) {
-    await handleStoreCodeInput(lineUserId, text, event.replyToken);
+    await handleStoreCodeInput(lineUserId, text, replyToken);
   } else {
     // 通常メッセージ（希望提出など）
     if (text.includes('希望') || text.includes('シフト')) {
-      await sendShiftMenu(event.replyToken);
+      await sendShiftMenu(replyToken);
     } else {
       await client.replyMessage({
-        replyToken: event.replyToken,
+        replyToken: replyToken,
         messages: [{ type: 'text', text: '「シフト希望提出」と送るとメニューが出ます！' }],
       });
     }
