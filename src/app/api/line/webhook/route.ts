@@ -196,23 +196,6 @@ async function handleStoreCodeInput(lineUserId: string, code: string) {
   await messagingClient.setDefaultRichMenu(process.env.LINE_RICH_MENU_ID!);
 }
 
-// postback処理（希望提出）
-async function handlePostback(event: any) {
-  const data = event.postback.data;
-  const params = new URLSearchParams(data);
-  const action = params.get('action');
-
-  if (action === 'submit_shift') {
-    await sendShiftMenu(event.source.userId); // pushMessageでFlex送る
-  } else if (action === 'change_store') {
-    await handleChangeStore(event.source.userId, event.replyToken);
-  } else if (action === 'view_preferences') {
-    const date = params.get('date');
-    const status = params.get('status');
-    const timeSlot = params.get('time_slot');
-  }
-}
-
 // Flex Messageメニュー送信例
 async function sendShiftMenu(lineUserId: string) {
   const flexMessage: messagingApi.FlexMessage = {
@@ -340,6 +323,240 @@ async function handleChangeStore(lineUserId: string, replyToken: string) {
   });
 }
 
+
+// postback処理（希望提出）
+async function handlePostback(event: any) {
+  try {
+    const data = event.postback.data;
+    const params = new URLSearchParams(data);
+    const action = params.get('action');
+    const lineUserId = event.source.userId;
+
+    if (action === 'submit_shift') {
+      // 希望提出メニュー（日付選択Flex）を送信
+      await sendShiftDatePicker(lineUserId);
+    } else if (action === 'select_date') {
+      const date = params.get('date');
+      if (!date) {
+        await messagingClient.pushMessage({
+          to: lineUserId,
+          messages: [{ type: 'text', text: '日付が取得できませんでした。もう一度お試しください。' }],
+        });
+        return;
+      }
+      await sendStatusPicker(lineUserId, date);
+    } else if (action === 'select_status') {
+      const date = params.get('date');
+      const status = params.get('status');
+      if (!date || !status) {
+        await messagingClient.pushMessage({
+          to: lineUserId,
+          messages: [{ type: 'text', text: '日付または希望が取得できませんでした。もう一度お試しください。' }],
+        });
+        return;
+      }
+      await sendTimeSlotPicker(lineUserId, date, status);
+    } else if (action === 'select_time_slot') {
+      const date = params.get('date');
+      const status = params.get('status');
+      const timeSlot = params.get('time_slot');
+      if (!date || !status || !timeSlot) {
+        await messagingClient.pushMessage({
+          to: lineUserId,
+          messages: [{ type: 'text', text: '必要な情報が取得できませんでした。もう一度お試しください。' }],
+        });
+        return;
+      }
+      await savePreference(lineUserId, date, status, timeSlot);
+    }
+  } catch (err) {
+    console.error('handlePostbackエラー:', err);
+    await messagingClient.pushMessage({
+      to: event.source.userId,
+      messages: [{ type: 'text', text: '処理中にエラーが発生しました。もう一度試してください。' }],
+    });
+  }
+}
+
+async function sendShiftDatePicker(userId: string) {
+  const flexMessage: messagingApi.FlexMessage = {
+    type: 'flex',
+    altText: '希望日を選択してください',
+    contents: {
+      type: 'bubble',
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'text',
+            text: '希望日を選択してください',
+            weight: 'bold',
+            size: 'xl',
+            margin: 'md',
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'md',
+            contents: [
+              {
+                type: 'button',
+                action: {
+                  type: 'postback',
+                  label: '2/15 (日)',
+                  data: 'action=select_date&date=2026-02-15',
+                },
+                style: 'primary',
+              },
+              {
+                type: 'button',
+                action: {
+                  type: 'postback',
+                  label: '2/16 (月)',
+                  data: 'action=select_date&date=2026-02-16',
+                },
+                style: 'primary',
+              },
+              // 他の日付ボタンも追加（最大6個くらい）
+            ],
+          },
+        ],
+      },
+    },
+  };
+
+    await messagingClient.pushMessage({
+        to: userId,
+        messages: [flexMessage],
+    });
+}
+async function sendStatusPicker(userId: string, date: string) {
+  const flexMessage: messagingApi.FlexMessage = {
+    type: 'flex',
+    altText: `${date} の希望を選択`,
+    contents: {
+      type: 'bubble',
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'text',
+            text: `${date} の希望は？`,
+            weight: 'bold',
+            size: 'xl',
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'md',
+            margin: 'md',
+            contents: [
+              {
+                type: 'button',
+                action: {
+                  type: 'postback',
+                  label: '◯ 出たい',
+                  data: `action=select_status&date=${date}&status=ok`,
+                },
+                style: 'primary',
+                color: '#00FF00',
+              },
+              {
+                type: 'button',
+                action: {
+                  type: 'postback',
+                  label: '△ 微妙',
+                  data: `action=select_status&date=${date}&status=maybe`,
+                },
+                style: 'primary',
+                color: '#FFFF00',
+              },
+              {
+                type: 'button',
+                action: {
+                  type: 'postback',
+                  label: '× 休み',
+                  data: `action=select_status&date=${date}&status=no`,
+                },
+                style: 'primary',
+                color: '#FF0000',
+              },
+            ],
+          },
+        ],
+      },
+    },
+  };
+
+  await messagingClient.pushMessage({
+    to: userId,
+    messages: [flexMessage],
+  });
+}
+
+async function sendTimeSlotPicker(userId: string, date: string, status: string) {
+  const timeSlots = ['早番', '日勤', '遅番', '夜勤', 'フル', '休み希望'];
+
+  const buttons: messagingApi.FlexButton[] = timeSlots.map(slot => ({
+    type: 'button',
+    action: {
+      type: 'postback',
+      label: slot,
+      data: `action=select_time_slot&date=${date}&status=${status}&time_slot=${slot}`,
+    },
+    style: 'primary',
+    margin: 'sm',
+  }));
+
+  const flexMessage: messagingApi.FlexMessage = {
+    type: 'flex',
+    altText: `${date} の時間帯`,
+    contents: {
+      type: 'bubble',
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          { type: 'text', text: `${date} の時間帯を選択`, weight: 'bold', size: 'xl' },
+          { type: 'box', layout: 'vertical', spacing: 'md', margin: 'md', contents: buttons },
+        ],
+      },
+    },
+  };
+
+  await messagingClient.pushMessage({
+    to: userId,
+    messages: [flexMessage],
+  });
+}
+
+async function savePreference(userId: string, date: string, status: string, timeSlot: string | null) {
+  const { error } = await supabase.from('shift_preferences').upsert({
+    user_id: userId,
+    store_id: '店舗ID（後で取得）', // 登録店舗から取る
+    shift_date: date,
+    status,
+    time_slot: timeSlot,
+    note: null,
+  });
+
+  if (error) {
+    console.error('希望保存エラー:', error);
+    await messagingClient.pushMessage({
+      to: userId,
+      messages: [{ type: 'text', text: '保存に失敗しました。もう一度試してください。'}],
+    });
+    return;
+  }
+
+  await messagingClient.pushMessage({
+    to: userId,
+    messages: [{ type: 'text', text: `${date} の希望を${status}で登録しました！\nありがとうございます！`}],
+  });
+}
+
 async function createAndSetRichMenu(lineUserId: string) {
   try {
     // リッチメニュー定義（2行4列例）
@@ -354,6 +571,7 @@ async function createAndSetRichMenu(lineUserId: string) {
           action: {
             type: 'postback',
             data: 'action=submit_shift',
+            displayText: 'シフト希望を提出したい',
           },
         },
         {
@@ -361,6 +579,7 @@ async function createAndSetRichMenu(lineUserId: string) {
           action: {
             type: 'postback',
             data: 'action=view_preferences',
+            displayText: 'シフト希望を確認する',
           },
         },
         {
@@ -368,6 +587,7 @@ async function createAndSetRichMenu(lineUserId: string) {
           action: {
             type: 'postback',
             data: 'action=change_store',
+            displayText: '店舗を切り替える',
           },
         },
         {
