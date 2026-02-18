@@ -14,11 +14,11 @@ function validateSignature(body: string, signature: string) {
   return hash === signature;
 }
 
-const client = new messagingApi.MessagingApiClient({
+const messagingClient = new messagingApi.MessagingApiClient({
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!
 });
 
-const richMenuApi = new messagingApi.MessagingApiBlobClient({
+const blobClient = new messagingApi.MessagingApiBlobClient({
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!
 });
 
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
     let profile;
     try {
-      profile = await client.getProfile(lineUserId);
+      profile = await messagingClient.getProfile(lineUserId);
     } catch (err) {
       console.error('getProfile完全失敗:', err);
       profile = { displayName: 'ゲストユーザー' };
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     } else if (event.type === 'message') {
       console.log('メッセージイベント:', lineUserId, '内容:', event.message.text);
       if (event.replyToken && event.type === 'message' && event.message.type === 'text') {
-        await client.replyMessage({
+        await messagingClient.replyMessage({
           replyToken: event.replyToken,
           messages: [{ type: 'text', text: '処理中です...！' }],
         });
@@ -104,7 +104,7 @@ async function handleFollow(event: any, profile: any) {
   await createAndSetRichMenu(lineUserId);
 
   // 挨拶メッセージ（必ず最後に）
-  await client.replyMessage({
+  await messagingClient.replyMessage({
     replyToken: replyToken,
     messages: [
       {
@@ -127,7 +127,7 @@ async function handleMessage(event: any) {
     if (text.includes('希望') || text.includes('シフト')) {
       await sendShiftMenu(lineUserId);
     } else {
-      await client.pushMessage({
+      await messagingClient.pushMessage({
         to: lineUserId,
         messages: [{ type: 'text', text: '「シフト希望提出」と送るとメニューが出ます！' }],
       });
@@ -153,7 +153,7 @@ async function handleStoreCodeInput(lineUserId: string, code: string) {
 
   if (error || !store) {
     console.error('店舗検索失敗:', error?.message || 'レコードなし');
-    await client.pushMessage({
+    await messagingClient.pushMessage({
       to: lineUserId,
       messages: [{ type: 'text', text: '店舗コードが見つかりませんでした。\n入力したコード: ' + trimmedCode + '\nもう一度確認してください！' }],
     });
@@ -177,14 +177,14 @@ async function handleStoreCodeInput(lineUserId: string, code: string) {
 
   if (storesError) {
     console.error('user_stores登録エラー:', storesError);
-    await client.pushMessage({
+    await messagingClient.pushMessage({
       to: lineUserId,
       messages: [{ type: 'text', text: '登録に失敗しました。店舗に連絡してください。' }],
     });
     return;
   }
 
-  await client.pushMessage({
+  await messagingClient.pushMessage({
     to: lineUserId,
     messages: [
       { type: 'text', text: '店舗登録完了しました！' },
@@ -193,7 +193,7 @@ async function handleStoreCodeInput(lineUserId: string, code: string) {
   });
 
   // リッチメニュー適用（メニューIDを環境変数から取る）
-  await client.setDefaultRichMenu(process.env.LINE_RICH_MENU_ID!);
+  await messagingClient.setDefaultRichMenu(process.env.LINE_RICH_MENU_ID!);
 }
 
 // postback処理（希望提出）
@@ -245,7 +245,7 @@ async function sendShiftMenu(lineUserId: string) {
     },
   };
 
-    await client.pushMessage({
+    await messagingClient.pushMessage({
         to: lineUserId,
         messages: [flexMessage],
     });
@@ -276,7 +276,7 @@ async function handleChangeStore(lineUserId: string, replyToken: string) {
   const registeredStores = await getUserStores(lineUserId);
 
   if (registeredStores.length === 0) {
-    await client.replyMessage({
+    await messagingClient.replyMessage({
       replyToken,
       messages: [
         {
@@ -330,7 +330,7 @@ async function handleChangeStore(lineUserId: string, replyToken: string) {
     },
   };
 
-  await client.replyMessage({
+  await messagingClient.replyMessage({
     replyToken,
     messages: [
       { type: 'text', text: '登録済み店舗一覧です。切り替えたい店舗を選択してください。' },
@@ -340,7 +340,6 @@ async function handleChangeStore(lineUserId: string, replyToken: string) {
   });
 }
 
-// リッチメニュー作成（友達追加時に1回だけ呼ぶ）
 async function createAndSetRichMenu(lineUserId: string) {
   try {
     // リッチメニュー定義（2行4列例）
@@ -386,18 +385,19 @@ async function createAndSetRichMenu(lineUserId: string) {
     };
 
     // リッチメニュー作成
-    const { richMenuId } = await client.createRichMenu(richMenu);
+    const createResponse = await messagingClient.createRichMenu(richMenu);
+    const richMenuId = createResponse.richMenuId;
+    console.log('リッチメニュー作成成功:', richMenuId);
 
-    // 画像アップロード（事前に用意した画像をBufferで）
-    // 画像はローカルやS3から読み込んでアップロード
+    // 画像アップロード
     const imageBuffer = await fs.readFile('public/rich-menu.png');
-    const imageBlob = new Blob([imageBuffer], { type: 'image/png' });
-    await richMenuApi.setRichMenuImage(richMenuId, imageBlob);
+    await blobClient.setRichMenuImage(richMenuId, new Blob([imageBuffer], { type: 'image/png' }));
+    console.log('リッチメニュー画像アップロード成功');
 
-    // ユーザーごとに適用（デフォルトメニューにする場合も可）
-    await client.getRichMenu(richMenuId);
+    // **ユーザーごとに適用**（これが大事！）
+    await messagingClient.linkRichMenuIdToUser(lineUserId, richMenuId);
 
-    console.log('リッチメニュー適用成功:', richMenuId);
+    console.log('リッチメニューをユーザー', lineUserId, 'に適用成功');
 
     return richMenuId;
   } catch (err) {
