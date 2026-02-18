@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { messagingApi } from '@line/bot-sdk';
+import fs from 'fs/promises';
 
 // 署名検証
 function validateSignature(body: string, signature: string) {
@@ -14,6 +15,10 @@ function validateSignature(body: string, signature: string) {
 }
 
 const client = new messagingApi.MessagingApiClient({
+  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!
+});
+
+const richMenuApi = new messagingApi.MessagingApiBlobClient({
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!
 });
 
@@ -371,4 +376,70 @@ async function handleChangeStore(lineUserId: string, replyToken: string) {
       { type: 'text', text: '新規店舗を追加したい場合は、新しい店舗コードを入力してください。' },
     ],
   });
+}
+
+// リッチメニュー作成（友達追加時に1回だけ呼ぶ）
+async function createAndSetRichMenu(lineUserId: string) {
+  try {
+    // リッチメニュー定義（2行4列例）
+    const richMenu: messagingApi.RichMenuRequest = {
+      size: { width: 2500, height: 1686 }, // Largeサイズ（推奨）
+      selected: true,
+      name: 'シフト管理メニュー',
+      chatBarText: 'メニューを開く',
+      areas: [
+        {
+          bounds: { x: 0, y: 0, width: 1250, height: 843 },
+          action: {
+            type: 'postback',
+            data: 'action=submit_shift',
+            displayText: 'シフト希望提出',
+          },
+        },
+        {
+          bounds: { x: 1250, y: 0, width: 1250, height: 843 },
+          action: {
+            type: 'postback',
+            data: 'action=change_store',
+            displayText: '店舗切替',
+          },
+        },
+        {
+          bounds: { x: 0, y: 843, width: 1250, height: 843 },
+          action: {
+            type: 'postback',
+            data: 'action=view_preferences',
+            displayText: '希望確認',
+          },
+        },
+        {
+          bounds: { x: 1250, y: 843, width: 1250, height: 843 },
+          action: {
+            type: 'uri',
+            uri: 'https://your-app.vercel.app/help', // ヘルプページURL
+            label: 'ヘルプ',
+          },
+        },
+      ],
+    };
+
+    // リッチメニュー作成
+    const { richMenuId } = await client.createRichMenu(richMenu);
+
+    // 画像アップロード（事前に用意した画像をBufferで）
+    // 画像はローカルやS3から読み込んでアップロード
+    const imageBuffer = await fs.readFile('public/rich-menu.png');
+    const imageBlob = new Blob([imageBuffer], { type: 'image/png' });
+    await richMenuApi.setRichMenuImage(richMenuId, imageBlob);
+
+    // ユーザーごとに適用（デフォルトメニューにする場合も可）
+    await client.getRichMenu(richMenuId);
+
+    console.log('リッチメニュー適用成功:', richMenuId);
+
+    return richMenuId;
+  } catch (err) {
+    console.error('リッチメニュー作成/適用エラー:', err);
+    return null;
+  }
 }
