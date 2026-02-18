@@ -354,23 +354,20 @@ async function createAndSetRichMenu(lineUserId: string) {
           action: {
             type: 'postback',
             data: 'action=submit_shift',
-            displayText: 'シフト希望提出',
           },
         },
         {
           bounds: { x: 1250, y: 0, width: 1250, height: 843 },
           action: {
             type: 'postback',
-            data: 'action=change_store',
-            displayText: '店舗切替',
+            data: 'action=view_preferences',
           },
         },
         {
           bounds: { x: 0, y: 843, width: 1250, height: 843 },
           action: {
             type: 'postback',
-            data: 'action=view_preferences',
-            displayText: '希望確認',
+            data: 'action=change_store',
           },
         },
         {
