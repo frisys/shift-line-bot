@@ -101,6 +101,7 @@ async function handleFollow(event: any, profile: any) {
   } catch (err) {
     console.error('handleFollow全体エラー:', err);
   }
+  await createAndSetRichMenu(lineUserId);
 
   // 挨拶メッセージ（必ず最後に）
   await client.replyMessage({
@@ -201,53 +202,14 @@ async function handlePostback(event: any) {
   const params = new URLSearchParams(data);
   const action = params.get('action');
 
-  if (action === 'シフト提出') {
+  if (action === 'submit_shift') {
     await sendShiftMenu(event.source.userId); // pushMessageでFlex送る
-  } else if (action === 'シフト確認') {
-    // 自分の希望一覧を表示（後で実装）
-  } else if (action === '店舗切替') {
+  } else if (action === 'change_store') {
     await handleChangeStore(event.source.userId, event.replyToken);
-  } else if (action === 'submit_preference') {
+  } else if (action === 'view_preferences') {
     const date = params.get('date');
     const status = params.get('status');
     const timeSlot = params.get('time_slot');
-  } else if (action === 'switch_store') {
-    const storeId = params.get('store_id');
-    const lineUserId = event.source.userId;
-
-    if (!storeId) {
-      await client.replyMessage({
-        replyToken: event.replyToken,
-        messages: [{ type: 'text', text: '店舗情報が正しくありません。もう一度お試しください。' }],
-      });
-      return;
-    }
-
-    try {
-      const { error } = await supabase.from('user_stores').upsert({
-        user_id: lineUserId,
-        store_id: storeId,
-        role: 'staff',  // 必要に応じて変更
-      }, { onConflict: 'user_id, store_id' });
-
-      if (error) throw error;
-
-      await client.replyMessage({
-        replyToken: event.replyToken,
-        messages: [
-          {
-            type: 'text',
-            text: '店舗を切り替えました！\nこれからはこの店舗のシフト希望を提出できます。',
-          },
-        ],
-      });
-    } catch (err) {
-      console.error('店舗切り替えエラー:', err);
-      await client.replyMessage({
-        replyToken: event.replyToken,
-        messages: [{ type: 'text', text: '切り替えに失敗しました。もう一度試してください。' }],
-      });
-    }
   }
 }
 
