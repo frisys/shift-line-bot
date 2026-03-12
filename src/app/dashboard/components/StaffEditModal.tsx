@@ -2,9 +2,9 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase/client';
 import toast from 'react-hot-toast';
 import { Staff } from '@/types';
+import { updateStaffProfile, updateStaffStoreSettings } from '@/services';
 
 interface StaffEditModalProps {
   staff: Staff;
@@ -27,33 +27,29 @@ export default function StaffEditModal({ staff, onClose }: StaffEditModalProps) 
   const handleSave = async () => {
     setSaving(true);
     try {
-      // profiles更新（名前、連勤日数など）
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          name: formData.name,
-        })
-        .eq('id', formData.id);
+      // profiles更新（名前）
+      const { error: profileError } = await updateStaffProfile(formData.id, {
+        name: formData.name || '',
+      });
 
       if (profileError) throw profileError;
 
-      // user_stores更新（role）
-      const { error: storesError  } = await supabase
-        .from('user_stores')
-        .update({
-        role: formData.role,
-        max_consecutive_days: formData.max_consecutive_days,
-        max_weekly_days: formData.max_weekly_days,
-        unavailable_days: formData.unavailable_days,
-        preferred_time_slots: formData.preferred_time_slots,
-        })
-        .eq('user_id', formData.id)
-        .eq('store_id', formData.store_id);  // 店舗指定で更新（複数店舗対応）
+      // user_stores更新（役割、勤務制約）
+      const { error: storesError } = await updateStaffStoreSettings(
+        formData.id,
+        formData.store_id,
+        {
+          role: formData.role,
+          max_consecutive_days: formData.max_consecutive_days,
+          max_weekly_days: formData.max_weekly_days,
+          unavailable_days: formData.unavailable_days,
+          preferred_time_slots: formData.preferred_time_slots,
+        }
+      );
 
-      if (storesError ) throw storesError ;
+      if (storesError) throw storesError;
 
       toast.success('スタッフ情報を更新しました！');
-    //   onSave(formData);
       onClose();
     } catch (err: unknown) {
       toast.error('更新に失敗しました: ' + (err instanceof Error ? err.message : '不明なエラー'));

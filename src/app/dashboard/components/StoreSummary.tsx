@@ -2,21 +2,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase/client';
-import { Store } from '@/types';  // 型をインポート（src/types/store.tsから）
+import { Store } from '@/types';
 import toast from 'react-hot-toast';
-
-const weekdayMap: { [key: string]: string } = {
-  mon: '月',
-  tue: '火',
-  wed: '水',
-  thu: '木',
-  fri: '金',
-  sat: '土',
-  sun: '日',
-};
-
-const getJapaneseWeekday = (eng: string) => weekdayMap[eng.toLowerCase()] || eng;
+import { DAYS_ORDER, getJapaneseWeekday } from '@/constants';
+import { updateRequiredStaff } from '@/services';
 
 interface StoreSummaryProps {
   selectedStoreId: string | null;
@@ -58,10 +47,7 @@ export default function StoreSummary({ selectedStoreId, stores, onUpdateStores }
 
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('stores')
-        .update({ required_staff: editedRequired })
-        .eq('id', selectedStoreId);
+      const { error } = await updateRequiredStaff(selectedStoreId, editedRequired);
 
       if (error) throw error;
 
@@ -104,16 +90,6 @@ export default function StoreSummary({ selectedStoreId, stores, onUpdateStores }
   };
 
   if (!store) return null;
-
-  const days = [
-    { eng: 'sun', ja: '日' },
-    { eng: 'mon', ja: '月' },
-    { eng: 'tue', ja: '火' },
-    { eng: 'wed', ja: '水' },
-    { eng: 'thu', ja: '木' },
-    { eng: 'fri', ja: '金' },
-    { eng: 'sat', ja: '土' },
-  ];
 
   return (
     <section className="mb-10">
@@ -172,7 +148,7 @@ export default function StoreSummary({ selectedStoreId, stores, onUpdateStores }
         {/* 必要人数カードエリア */}
         <div className="p-6">
           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-4">
-            {days.map(({ eng, ja }) => {
+            {DAYS_ORDER.map(({ eng, ja }) => {
               const count = editedRequired[eng] ?? originalRequired[eng] ?? 0;
               const isChanged = editedRequired[eng] !== undefined && editedRequired[eng] !== originalRequired[eng];
 

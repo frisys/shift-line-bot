@@ -1,15 +1,11 @@
 'use client';
 
-import { createClient } from '@supabase/supabase-js';
 import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase/client';
+import type { Store } from '@/types';
 
 export default function TestPage() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [stores, setStores] = useState<any[]>([]);
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const [stores, setStores] = useState<Store[]>([]);
 
   useEffect(() => {
     async function fetchData() {

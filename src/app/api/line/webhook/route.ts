@@ -2,7 +2,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
-import { messagingApi } from '@line/bot-sdk';
+import {
+  messagingApi,
+  WebhookEvent,
+  FollowEvent,
+  MessageEvent,
+  PostbackEvent,
+  Profile,
+} from '@line/bot-sdk';
 import fs from 'fs/promises';
 
 // 署名検証
@@ -37,12 +44,13 @@ export async function POST(req: NextRequest) {
   }
 
   const parsed = JSON.parse(body);
-  const events = parsed.events;
+  const events: WebhookEvent[] = parsed.events;
 
   for (const event of events) {
-    const lineUserId = event.source.userId;
+    const lineUserId = event.source?.userId;
+    if (!lineUserId) continue;
 
-    let profile;
+    let profile: Profile | { displayName: string };
     try {
       profile = await messagingClient.getProfile(lineUserId);
     } catch (err) {
@@ -55,28 +63,31 @@ export async function POST(req: NextRequest) {
       console.log('友達追加イベント受信');
       console.log('LINE User ID:', lineUserId);
       console.log('表示名:', profile.displayName);
-      await handleFollow(event, profile);
+      await handleFollow(event as FollowEvent, profile);
     } else if (event.type === 'message') {
-      console.log('メッセージイベント:', lineUserId, '内容:', event.message.text);
-      if (event.replyToken && event.type === 'message' && event.message.type === 'text') {
+      const messageEvent = event as MessageEvent;
+      if (messageEvent.message.type === 'text') {
+        console.log('メッセージイベント:', lineUserId, '内容:', messageEvent.message.text);
+      }
+      if (messageEvent.replyToken && messageEvent.message.type === 'text') {
         await messagingClient.replyMessage({
-          replyToken: event.replyToken,
+          replyToken: messageEvent.replyToken,
           messages: [{ type: 'text', text: '処理中です...！' }],
         });
         console.log('即時返信完了:', event.type, 'ユーザーID:', lineUserId);
       }
-      await handleMessage(event);
+      await handleMessage(messageEvent);
     } else if (event.type === 'postback') {
-      console.log('ポストバックイベント:', lineUserId, 'データ:', event.postback.data);
-      await handlePostback(event);
+      console.log('ポストバックイベント:', lineUserId, 'データ:', (event as PostbackEvent).postback.data);
+      await handlePostback(event as PostbackEvent);
     }
-  };
+  }
   return NextResponse.json({ status: 'OK' });
 }
 
 // 友達追加時の処理
-async function handleFollow(event: any, profile: any) {
-  const lineUserId = event.source.userId;
+async function handleFollow(event: FollowEvent, profile: Profile | { displayName: string }) {
+  const lineUserId = event.source.userId!;
   const replyToken = event.replyToken;
 
   try {
@@ -116,8 +127,9 @@ async function handleFollow(event: any, profile: any) {
 }
 
 // メッセージ受信時（メニュー表示など）
-async function handleMessage(event: any) {
-  const lineUserId = event.source.userId;
+async function handleMessage(event: MessageEvent) {
+  const lineUserId = event.source.userId!;
+  if (event.message.type !== 'text') return;
   const text = event.message.text.trim();
   // 店舗番号っぽい入力（英数4〜10文字くらい）を検知
   if (/^[A-Za-z0-9-]{4,10}$/.test(text)) {
@@ -234,6 +246,11 @@ async function sendShiftMenu(lineUserId: string) {
     });
 }
 
+interface UserStoreQueryResult {
+  store_id: string;
+  stores: { name: string; store_code: string } | { name: string; store_code: string }[] | null;
+}
+
 async function getUserStores(lineUserId: string) {
   const { data, error } = await supabase
     .from('user_stores')
@@ -248,11 +265,14 @@ async function getUserStores(lineUserId: string) {
     return [];
   }
 
-  return data.map((item: any) => ({
-    store_id: item.store_id,
-    name: item.stores?.name || '不明',
-    store_code: item.stores?.store_code || '不明',
-  }));
+  return (data as unknown as UserStoreQueryResult[]).map((item) => {
+    const stores = Array.isArray(item.stores) ? item.stores[0] : item.stores;
+    return {
+      store_id: item.store_id,
+      name: stores?.name || '不明',
+      store_code: stores?.store_code || '不明',
+    };
+  });
 }
 
 async function handleChangeStore(lineUserId: string, replyToken: string) {
@@ -325,12 +345,12 @@ async function handleChangeStore(lineUserId: string, replyToken: string) {
 
 
 // postback処理（希望提出）
-async function handlePostback(event: any) {
+async function handlePostback(event: PostbackEvent) {
   try {
     const data = event.postback.data;
     const params = new URLSearchParams(data);
     const action = params.get('action');
-    const lineUserId = event.source.userId;
+    const lineUserId = event.source.userId!;
 
     if (action === 'submit_shift') {
       // 希望提出メニュー（日付選択Flex）を送信
@@ -371,10 +391,13 @@ async function handlePostback(event: any) {
     }
   } catch (err) {
     console.error('handlePostbackエラー:', err);
-    await messagingClient.pushMessage({
-      to: event.source.userId,
-      messages: [{ type: 'text', text: '処理中にエラーが発生しました。もう一度試してください。' }],
-    });
+    const userId = event.source.userId;
+    if (userId) {
+      await messagingClient.pushMessage({
+        to: userId,
+        messages: [{ type: 'text', text: '処理中にエラーが発生しました。もう一度試してください。' }],
+      });
+    }
   }
 }
 

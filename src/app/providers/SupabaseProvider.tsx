@@ -1,14 +1,14 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
+import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase/client';
+import type { AuthContextValue } from '@/types';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const AuthContext = createContext<any>(null);
+const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

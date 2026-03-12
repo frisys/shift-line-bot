@@ -2,41 +2,18 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import dayjs from 'dayjs';
-import utc from 'dayjs/plugin/utc';
-import timezone from 'dayjs/plugin/timezone';
-import { ShiftPreference } from "@/types/shift-preference";
+import { ShiftPreference } from '@/types';
+import { getWeekStart, getWeekDays } from '@/utils';
 
 interface ShiftPreferencesTableProps {
   preferences: ShiftPreference[];
 }
 
-dayjs.extend(utc);
-dayjs.extend(timezone);
-
-dayjs.tz.setDefault('Asia/Tokyo');
-
 export default function ShiftPreferencesTable({ preferences }: ShiftPreferencesTableProps) {
-  const JST_OFFSET_MS = 9 * 60 * 60 * 1000; // UTC+9のミリ秒
-
-  // 週の開始日（日曜始まり）
-  const getWeekStart = (date: Date) => {
-    const d = dayjs(date).tz('Asia/Tokyo');
-    const day = d.day(); // 0=日曜
-    const diff = day === 0 ? 0 : day;
-    return d.subtract(diff, 'day').startOf('day').toDate()
-  };
-
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(getWeekStart(new Date()));
 
   const weekDays = useMemo(() => {
-    const days = [];
-    for (let i = 0; i < 7; i++) {
-      const d = dayjs(new Date(currentWeekStart));
-      const dateWithOffset = d.add(i, 'day').format('YYYY-MM-DD');
-      days.push(dateWithOffset); // 'YYYY-MM-DD'
-    }
-    return days;
+    return getWeekDays(currentWeekStart);
   }, [currentWeekStart]);
 
   // スタッフごとに希望をマップ

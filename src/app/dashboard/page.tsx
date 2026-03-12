@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useDashboardData } from './hooks/useDashboardData';
+import { useDashboardData } from '@/hooks';
 import DashboardHeader from './components/DashboardHeader';
 import StoreSummary from './components/StoreSummary';
 import StaffList from './components/StaffList';
