@@ -120,7 +120,11 @@ async function handleFollow(event: FollowEvent, profile: Profile | { displayName
     messages: [
       {
         type: 'text',
-        text: `こんにちは、${profile.displayName}さん！\n\nあなたの店舗コードを入力してください。\n例: ABC123\n（店長からもらった6桁のコードです）`,
+        text: `こんにちは、${profile.displayName}さん！\nシフト管理Botへようこそ！`,
+      },
+      {
+        type: 'text',
+        text: `まずは働く店舗の登録をしましょう。\n\n店長からもらった店舗コードを入力してください。\n例: ABC123\n\n※複数の店舗で働く場合は、それぞれの店舗コードを順番に入力してください。`,
       },
     ],
   });
@@ -199,8 +203,8 @@ async function handleStoreCodeInput(lineUserId: string, code: string) {
   await messagingClient.pushMessage({
     to: lineUserId,
     messages: [
-      { type: 'text', text: '店舗登録完了しました！' },
-      { type: 'text', text: 'これからシフト希望を提出できます。下のメニューから「シフト希望提出」をタップしてください！' },
+      { type: 'text', text: `🎉 「${store.name}」への登録が完了しました！` },
+      { type: 'text', text: 'シフト希望を提出できます。下のメニューから「シフト希望提出」をタップしてください！\n\n💡 他の店舗でも働く場合は、その店舗コードを入力すると追加登録できます。' },
     ],
   });
 
@@ -352,9 +356,26 @@ async function handlePostback(event: PostbackEvent) {
     const action = params.get('action');
     const lineUserId = event.source.userId!;
 
+    // 空ボタン（カレンダーの空白部分）は無視
+    if (action === 'noop') {
+      return;
+    }
+
     if (action === 'submit_shift') {
-      // 希望提出メニュー（日付選択Flex）を送信
-      await sendShiftDatePicker(lineUserId);
+      // 月選択メニューを送信
+      await sendMonthPicker(lineUserId);
+    } else if (action === 'select_month') {
+      // 選択された月の日付選択フォームを送信
+      const year = params.get('year');
+      const month = params.get('month');
+      if (!year || !month) {
+        await messagingClient.pushMessage({
+          to: lineUserId,
+          messages: [{ type: 'text', text: '月が取得できませんでした。もう一度お試しください。' }],
+        });
+        return;
+      }
+      await sendShiftDatePicker(lineUserId, parseInt(year), parseInt(month));
     } else if (action === 'select_date') {
       const date = params.get('date');
       if (!date) {
@@ -401,10 +422,19 @@ async function handlePostback(event: PostbackEvent) {
   }
 }
 
-async function sendShiftDatePicker(userId: string) {
+// 月選択メニューを送信
+async function sendMonthPicker(userId: string) {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // 0-indexed to 1-indexed
+
+  // 次月
+  const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
+  const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
+
   const flexMessage: messagingApi.FlexMessage = {
     type: 'flex',
-    altText: '希望日を選択してください',
+    altText: 'シフト希望を提出する月を選択',
     contents: {
       type: 'bubble',
       body: {
@@ -413,35 +443,43 @@ async function sendShiftDatePicker(userId: string) {
         contents: [
           {
             type: 'text',
-            text: '希望日を選択してください',
+            text: '📅 シフト希望提出',
             weight: 'bold',
             size: 'xl',
+            color: '#1DB446',
+          },
+          {
+            type: 'text',
+            text: '何月のシフトを提出しますか？',
+            size: 'md',
             margin: 'md',
+            color: '#666666',
           },
           {
             type: 'box',
-            layout: 'horizontal',
-            spacing: 'md',
+            layout: 'vertical',
+            spacing: 'sm',
+            margin: 'lg',
             contents: [
               {
                 type: 'button',
                 action: {
                   type: 'postback',
-                  label: '2/15 (日)',
-                  data: 'action=select_date&date=2026-02-15',
+                  label: `${currentMonth}月（今月）`,
+                  data: `action=select_month&year=${currentYear}&month=${currentMonth}`,
                 },
                 style: 'primary',
+                color: '#1DB446',
               },
               {
                 type: 'button',
                 action: {
                   type: 'postback',
-                  label: '2/16 (月)',
-                  data: 'action=select_date&date=2026-02-16',
+                  label: `${nextMonth}月（来月）`,
+                  data: `action=select_month&year=${nextYear}&month=${nextMonth}`,
                 },
-                style: 'primary',
+                style: 'secondary',
               },
-              // 他の日付ボタンも追加（最大6個くらい）
             ],
           },
         ],
@@ -449,10 +487,132 @@ async function sendShiftDatePicker(userId: string) {
     },
   };
 
-    await messagingClient.pushMessage({
-        to: userId,
-        messages: [flexMessage],
+  await messagingClient.pushMessage({
+    to: userId,
+    messages: [flexMessage],
+  });
+}
+
+// 日付選択メニューを送信（指定月の日付を動的生成）
+async function sendShiftDatePicker(userId: string, year: number, month: number) {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+
+  // 週ごとにボタンをグループ化
+  const weeks: messagingApi.FlexBox[] = [];
+  let currentWeek: messagingApi.FlexButton[] = [];
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month - 1, day);
+    const dayOfWeek = date.getDay();
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const label = `${day}(${weekdays[dayOfWeek]})`;
+
+    currentWeek.push({
+      type: 'button',
+      action: {
+        type: 'postback',
+        label: label,
+        data: `action=select_date&date=${dateStr}`,
+      },
+      style: 'primary',
+      color: dayOfWeek === 0 ? '#FF6B6B' : dayOfWeek === 6 ? '#4DABF7' : '#1DB446',
+      height: 'sm',
+      flex: 1,
     });
+
+    // 7日ごとまたは月末で週を確定
+    if (dayOfWeek === 6 || day === daysInMonth) {
+      // 週の先頭を埋める（月初が日曜でない場合）
+      if (day <= 7) {
+        const firstDayOfWeek = new Date(year, month - 1, 1).getDay();
+        for (let i = 0; i < firstDayOfWeek; i++) {
+          currentWeek.unshift({
+            type: 'button',
+            action: { type: 'postback', label: ' ', data: 'action=noop' },
+            style: 'secondary',
+            color: '#CCCCCC',
+            height: 'sm',
+            flex: 1,
+          });
+        }
+      }
+
+      // 週の末尾を埋める
+      while (currentWeek.length < 7) {
+        currentWeek.push({
+          type: 'button',
+          action: { type: 'postback', label: ' ', data: 'action=noop' },
+          style: 'secondary',
+          color: '#CCCCCC',
+          height: 'sm',
+          flex: 1,
+        });
+      }
+
+      weeks.push({
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'xs',
+        contents: currentWeek,
+      });
+      currentWeek = [];
+    }
+  }
+
+  const flexMessage: messagingApi.FlexMessage = {
+    type: 'flex',
+    altText: `${month}月の希望日を選択`,
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'text',
+            text: `📅 ${year}年${month}月`,
+            weight: 'bold',
+            size: 'xl',
+            color: '#1DB446',
+          },
+          {
+            type: 'text',
+            text: '希望を提出する日を選択してください',
+            size: 'sm',
+            margin: 'md',
+            color: '#666666',
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            margin: 'lg',
+            contents: weekdays.map((wd, i) => ({
+              type: 'text',
+              text: wd,
+              size: 'xs',
+              align: 'center',
+              color: i === 0 ? '#FF6B6B' : i === 6 ? '#4DABF7' : '#666666',
+              flex: 1,
+            })) as messagingApi.FlexText[],
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            spacing: 'xs',
+            margin: 'sm',
+            contents: weeks,
+          },
+        ],
+      },
+    },
+  };
+
+  await messagingClient.pushMessage({
+    to: userId,
+    messages: [flexMessage],
+  });
 }
 async function sendStatusPicker(userId: string, date: string) {
   const flexMessage: messagingApi.FlexMessage = {
