@@ -124,7 +124,7 @@ async function handleFollow(event: FollowEvent, profile: Profile | { displayName
       },
       {
         type: 'text',
-        text: `まずは働く店舗の登録をしましょう。\n\n店長からもらった店舗コードを入力してください。\n例: ABC123\n\n※複数の店舗で働く場合は、それぞれの店舗コードを順番に入力してください。`,
+        text: `まずは働く店舗の登録をしましょう。\n\nリッチメニューから店舗登録を選択し、\n店長からもらった店舗コードを入力してください。\n例: ABC123\n\n※複数の店舗で働く場合は、その都度リッチメニューから登録してください。`,
       },
     ],
   });
@@ -364,6 +364,12 @@ async function handlePostback(event: PostbackEvent) {
     if (action === 'submit_shift') {
       // 月選択メニューを送信
       await sendMonthPicker(lineUserId);
+    } else if (action === 'view_preferences') {
+      // シフト希望を確認
+      await sendPreferencesSummary(lineUserId);
+    } else if (action === 'change_store') {
+      // 店舗を切り替える
+      await handleChangeStore(lineUserId, event.replyToken);
     } else if (action === 'select_month') {
       // 選択された月の日付選択フォームを送信
       const year = params.get('year');
@@ -424,13 +430,30 @@ async function handlePostback(event: PostbackEvent) {
 
 // 月選択メニューを送信
 async function sendMonthPicker(userId: string) {
+  // ユーザーの登録店舗を取得
+  const stores = await getUserStores(userId);
+  if (stores.length === 0) {
+    await messagingClient.pushMessage({
+      to: userId,
+      messages: [{ type: 'text', text: '店舗が登録されていません。\n先に店舗コードを入力してください。' }],
+    });
+    return;
+  }
+
+  const storeId = stores[0].store_id;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://example.com';
+
   const now = new Date();
   const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth() + 1; // 0-indexed to 1-indexed
+  const currentMonth = now.getMonth() + 1;
 
   // 次月
   const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
   const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
+
+  // シフト選択ページのURL生成
+  const currentMonthUrl = `${baseUrl}/shift-select?year=${currentYear}&month=${currentMonth}&userId=${userId}&storeId=${storeId}`;
+  const nextMonthUrl = `${baseUrl}/shift-select?year=${nextYear}&month=${nextMonth}&userId=${userId}&storeId=${storeId}`;
 
   const flexMessage: messagingApi.FlexMessage = {
     type: 'flex',
@@ -464,9 +487,9 @@ async function sendMonthPicker(userId: string) {
               {
                 type: 'button',
                 action: {
-                  type: 'postback',
+                  type: 'uri',
                   label: `${currentMonth}月（今月）`,
-                  data: `action=select_month&year=${currentYear}&month=${currentMonth}`,
+                  uri: currentMonthUrl,
                 },
                 style: 'primary',
                 color: '#1DB446',
@@ -474,9 +497,9 @@ async function sendMonthPicker(userId: string) {
               {
                 type: 'button',
                 action: {
-                  type: 'postback',
+                  type: 'uri',
                   label: `${nextMonth}月（来月）`,
-                  data: `action=select_month&year=${nextYear}&month=${nextMonth}`,
+                  uri: nextMonthUrl,
                 },
                 style: 'secondary',
               },
@@ -640,7 +663,7 @@ async function sendStatusPicker(userId: string, date: string) {
                 type: 'button',
                 action: {
                   type: 'postback',
-                  label: '◯ 出たい',
+                  label: '◯ 出勤可',
                   data: `action=select_status&date=${date}&status=ok`,
                 },
                 style: 'primary',
@@ -716,27 +739,108 @@ async function sendTimeSlotPicker(userId: string, date: string, status: string) 
 }
 
 async function savePreference(userId: string, date: string, status: string, timeSlot: string | null) {
+  // ユーザーの登録店舗を取得
+  const stores = await getUserStores(userId);
+  if (stores.length === 0) {
+    await messagingClient.pushMessage({
+      to: userId,
+      messages: [{ type: 'text', text: '店舗が登録されていません。\n先に店舗コードを入力してください。' }],
+    });
+    return;
+  }
+
+  // 最初の登録店舗を使用（複数店舗対応は今後拡張）
+  const storeId = stores[0].store_id;
+
   const { error } = await supabase.from('shift_preferences').upsert({
     user_id: userId,
-    store_id: '店舗ID（後で取得）', // 登録店舗から取る
+    store_id: storeId,
     shift_date: date,
     status,
     time_slot: timeSlot,
     note: null,
-  });
+  }, { onConflict: 'user_id,store_id,shift_date' });
 
   if (error) {
     console.error('希望保存エラー:', error);
     await messagingClient.pushMessage({
       to: userId,
-      messages: [{ type: 'text', text: '保存に失敗しました。もう一度試してください。'}],
+      messages: [{ type: 'text', text: '保存に失敗しました。もう一度試してください。' }],
     });
     return;
   }
 
+  const statusLabel = status === 'ok' ? '出勤可' : status === 'maybe' ? '微妙' : '休み';
   await messagingClient.pushMessage({
     to: userId,
-    messages: [{ type: 'text', text: `${date} の希望を${status}で登録しました！\nありがとうございます！`}],
+    messages: [{ type: 'text', text: `${date} の希望を「${statusLabel}」で登録しました！\nありがとうございます！` }],
+  });
+}
+
+// シフト希望確認（今月・来月の提出済み希望を表示）
+async function sendPreferencesSummary(userId: string) {
+  const stores = await getUserStores(userId);
+  if (stores.length === 0) {
+    await messagingClient.pushMessage({
+      to: userId,
+      messages: [{ type: 'text', text: '店舗が登録されていません。\n先に店舗コードを入力してください。' }],
+    });
+    return;
+  }
+
+  const storeId = stores[0].store_id;
+  const storeName = stores[0].name;
+
+  // 今月と来月の範囲を取得
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const startDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
+
+  const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
+  const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
+  const lastDay = new Date(nextYear, nextMonth, 0).getDate();
+  const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-${lastDay}`;
+
+  const { data: preferences, error } = await supabase
+    .from('shift_preferences')
+    .select('shift_date, status, time_slot')
+    .eq('user_id', userId)
+    .eq('store_id', storeId)
+    .gte('shift_date', startDate)
+    .lte('shift_date', endDate)
+    .order('shift_date', { ascending: true });
+
+  if (error) {
+    console.error('希望取得エラー:', error);
+    await messagingClient.pushMessage({
+      to: userId,
+      messages: [{ type: 'text', text: '希望の取得に失敗しました。' }],
+    });
+    return;
+  }
+
+  if (!preferences || preferences.length === 0) {
+    await messagingClient.pushMessage({
+      to: userId,
+      messages: [{ type: 'text', text: `📋 ${storeName}\n\n提出済みのシフト希望はありません。\nリッチメニューから「シフト希望を提出」を選択してください。` }],
+    });
+    return;
+  }
+
+  // 希望一覧を文字列で作成
+  const statusIcons: Record<string, string> = { ok: '◯', maybe: '△', no: '×' };
+  const lines = preferences.map(p => {
+    const icon = statusIcons[p.status] || '?';
+    const slot = p.time_slot || '';
+    return `${p.shift_date} ${icon} ${slot}`;
+  });
+
+  const summaryText = `📋 ${storeName}\n\n【提出済みシフト希望】\n${lines.join('\n')}`;
+
+  await messagingClient.pushMessage({
+    to: userId,
+    messages: [{ type: 'text', text: summaryText }],
   });
 }
 
