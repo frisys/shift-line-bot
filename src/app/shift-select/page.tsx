@@ -11,7 +11,6 @@ interface ShiftPreference {
   timeSlot: string | null;
 }
 
-const TIME_SLOTS = ['早番', '日勤', '遅番', '夜勤', 'フル'] as const;
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'] as const;
 
 function ShiftSelectContent() {
@@ -183,7 +182,7 @@ function ShiftSelectContent() {
       case 'no':
         return 'bg-red-500 text-white';
       default:
-        return 'bg-gray-200 text-gray-600';
+        return 'bg-gray-200 text-gray-700';
     }
   };
 
@@ -205,7 +204,7 @@ function ShiftSelectContent() {
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full text-center">
           <p className="text-red-600 font-bold">エラー</p>
-          <p className="mt-2 text-gray-600">パラメータが不足しています</p>
+          <p className="mt-2 text-gray-800">パラメータが不足しています</p>
         </div>
       </div>
     );
@@ -220,25 +219,25 @@ function ShiftSelectContent() {
             📅 {year}年{month}月 シフト希望
           </h1>
           {storeName && (
-            <p className="text-center text-gray-600 mt-1">{storeName}</p>
+            <p className="text-center text-gray-700 mt-1">{storeName}</p>
           )}
         </div>
 
         {/* 凡例 */}
         <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
-          <p className="text-sm text-gray-600 mb-2">各日付をタップして希望を選択してください</p>
+          <p className="text-sm text-gray-800 mb-2">各日付をタップして希望を選択してください</p>
           <div className="flex justify-center gap-4 text-sm">
             <span className="flex items-center gap-1">
               <span className="w-6 h-6 rounded bg-green-500 text-white flex items-center justify-center text-xs">◯</span>
-              出勤可
+              <span className="text-gray-800">出勤可</span>
             </span>
             <span className="flex items-center gap-1">
               <span className="w-6 h-6 rounded bg-yellow-400 text-black flex items-center justify-center text-xs">△</span>
-              微妙
+              <span className="text-gray-800">微妙</span>
             </span>
             <span className="flex items-center gap-1">
               <span className="w-6 h-6 rounded bg-red-500 text-white flex items-center justify-center text-xs">×</span>
-              休み
+              <span className="text-gray-800">休み</span>
             </span>
           </div>
         </div>
@@ -251,7 +250,7 @@ function ShiftSelectContent() {
               <div
                 key={wd}
                 className={`text-center text-sm font-bold py-1 ${
-                  i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-gray-600'
+                  i === 0 ? 'text-red-600' : i === 6 ? 'text-blue-600' : 'text-gray-800'
                 }`}
               >
                 {wd}
@@ -264,17 +263,18 @@ function ShiftSelectContent() {
             <div key={weekIdx} className="grid grid-cols-7 gap-1 mb-1">
               {week.map((day, dayIdx) => {
                 if (day === null) {
-                  return <div key={dayIdx} className="aspect-square" />;
+                  return <div key={dayIdx} className="min-h-[72px]" />;
                 }
 
                 const dateStr = getDateString(day);
                 const pref = preferences[dateStr];
                 const dayOfWeek = new Date(year, month - 1, day).getDay();
+                const showTimeSlot = pref?.status === 'ok' || pref?.status === 'maybe';
 
                 return (
                   <div
                     key={dayIdx}
-                    className="aspect-square flex flex-col border rounded-lg overflow-hidden"
+                    className="min-h-[72px] flex flex-col border rounded-lg overflow-hidden"
                   >
                     {/* 日付 */}
                     <div
@@ -283,7 +283,7 @@ function ShiftSelectContent() {
                           ? 'bg-red-50 text-red-600'
                           : dayOfWeek === 6
                           ? 'bg-blue-50 text-blue-600'
-                          : 'bg-gray-50 text-gray-700'
+                          : 'bg-gray-50 text-gray-900'
                       }`}
                     >
                       {day}
@@ -298,69 +298,34 @@ function ShiftSelectContent() {
                         const nextStatus = statuses[(currentIdx + 1) % statuses.length];
                         handleStatusChange(day, nextStatus);
                       }}
-                      className={`flex-1 flex items-center justify-center text-lg font-bold ${getStatusColor(
+                      className={`flex-1 flex items-center justify-center text-base font-bold ${getStatusColor(
                         pref?.status || null
                       )}`}
                     >
                       {getStatusLabel(pref?.status || null)}
                     </button>
+
+                    {/* 時間帯セレクト */}
+                    {showTimeSlot && (
+                      <select
+                        value={pref?.timeSlot || ''}
+                        onChange={(e) => handleTimeSlotChange(day, e.target.value || null)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full text-xs text-gray-900 bg-white border-t px-0.5 py-0.5 text-center"
+                      >
+                        <option value="">--</option>
+                        <option value="早番">早番</option>
+                        <option value="日勤">日勤</option>
+                        <option value="遅番">遅番</option>
+                        <option value="夜勤">夜勤</option>
+                        <option value="フル">フル</option>
+                      </select>
+                    )}
                   </div>
                 );
               })}
             </div>
           ))}
-        </div>
-
-        {/* 時間帯選択 */}
-        <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
-          <h2 className="font-bold text-gray-900 mb-3">⏰ 時間帯（任意）</h2>
-          <p className="text-sm text-gray-600 mb-3">
-            出勤可（◯）または微妙（△）の日の希望時間帯を選択できます
-          </p>
-
-          <div className="space-y-2 max-h-60 overflow-y-auto">
-            {Object.values(preferences)
-              .filter((p) => p.status === 'ok' || p.status === 'maybe')
-              .sort((a, b) => a.date.localeCompare(b.date))
-              .map((pref) => {
-                const date = new Date(pref.date);
-                const day = date.getDate();
-                const dayOfWeek = WEEKDAYS[date.getDay()];
-
-                return (
-                  <div key={pref.date} className="flex items-center gap-2">
-                    <span className="w-20 text-sm font-medium">
-                      {month}/{day}({dayOfWeek})
-                    </span>
-                    <select
-                      value={pref.timeSlot || ''}
-                      onChange={(e) =>
-                        handleTimeSlotChange(
-                          day,
-                          e.target.value || null
-                        )
-                      }
-                      className="flex-1 px-2 py-1 border rounded text-sm"
-                    >
-                      <option value="">未選択</option>
-                      {TIME_SLOTS.map((slot) => (
-                        <option key={slot} value={slot}>
-                          {slot}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              })}
-
-            {Object.values(preferences).filter(
-              (p) => p.status === 'ok' || p.status === 'maybe'
-            ).length === 0 && (
-              <p className="text-gray-500 text-sm text-center py-4">
-                出勤可または微妙の日がありません
-              </p>
-            )}
-          </div>
         </div>
 
         {/* エラーメッセージ */}
@@ -391,7 +356,7 @@ function ShiftSelectContent() {
         </button>
 
         {/* 選択数サマリー */}
-        <div className="mt-4 text-center text-sm text-gray-600">
+        <div className="mt-4 text-center text-sm text-gray-800">
           選択済み: ◯{Object.values(preferences).filter((p) => p.status === 'ok').length}日 /
           △{Object.values(preferences).filter((p) => p.status === 'maybe').length}日 /
           ×{Object.values(preferences).filter((p) => p.status === 'no').length}日
@@ -405,7 +370,7 @@ function LoadingFallback() {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full text-center">
-        <p className="text-gray-600">読み込み中...</p>
+        <p className="text-gray-800">読み込み中...</p>
       </div>
     </div>
   );
