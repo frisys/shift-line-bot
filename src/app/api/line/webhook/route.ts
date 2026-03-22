@@ -912,7 +912,8 @@ function buildCalendarFlexMessage(
       flex: 1,
       contents: [
         { type: 'text', text: ' ', size: 'xs', align: 'center' },
-        { type: 'text', text: ' ', size: 'sm', align: 'center' },
+        { type: 'text', text: ' ', size: 'lg', align: 'center' },
+        { type: 'text', text: ' ', size: 'xxs', align: 'center' },
       ],
     });
   }
@@ -926,7 +927,7 @@ function buildCalendarFlexMessage(
     const dayColor = dayOfWeek === 0 ? '#EF4444' : dayOfWeek === 6 ? '#3B82F6' : '#374151';
     const statusIcon = pref ? statusIcons[pref.status] || '-' : '-';
     const statusColor = pref ? statusColors[pref.status] || '#9CA3AF' : '#9CA3AF';
-    const timeSlot = pref?.time_slot ? pref.time_slot.substring(0, 1) : '';
+    const timeSlot = pref?.time_slot ? pref.time_slot.substring(0, 1) : ' ';
 
     currentWeek.push({
       type: 'box',
@@ -949,7 +950,8 @@ function buildCalendarFlexMessage(
           flex: 1,
           contents: [
             { type: 'text', text: ' ', size: 'xs', align: 'center' },
-            { type: 'text', text: ' ', size: 'sm', align: 'center' },
+            { type: 'text', text: ' ', size: 'lg', align: 'center' },
+            { type: 'text', text: ' ', size: 'xxs', align: 'center' },
           ],
         });
       }
