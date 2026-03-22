@@ -161,7 +161,7 @@ function ShiftSelectContent() {
 
       const { error: upsertError } = await supabase
         .from('shift_preferences')
-        .upsert(records, { onConflict: 'user_id, store_id, shift_date' });
+        .upsert(records, { onConflict: 'user_id,store_id,shift_date' });
 
       if (upsertError) throw upsertError;
 

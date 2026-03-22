@@ -347,6 +347,41 @@ async function handleChangeStore(lineUserId: string, replyToken: string) {
   });
 }
 
+// 店舗切り替え実行
+async function handleSwitchStore(lineUserId: string, storeId: string) {
+  // 店舗情報を取得
+  const { data: store, error } = await supabase
+    .from('stores')
+    .select('id, name')
+    .eq('id', storeId)
+    .single();
+
+  if (error || !store) {
+    await messagingClient.pushMessage({
+      to: lineUserId,
+      messages: [{ type: 'text', text: '店舗情報の取得に失敗しました。' }],
+    });
+    return;
+  }
+
+  // profilesテーブルのactive_store_idを更新
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({ active_store_id: storeId })
+    .eq('line_user_id', lineUserId);
+
+  if (updateError) {
+    console.error('active_store_id更新エラー:', updateError);
+    // エラーでも切り替えメッセージは送る（カラムがない場合など）
+  }
+
+  await messagingClient.pushMessage({
+    to: lineUserId,
+    messages: [
+      { type: 'text', text: `「${store.name}」に切り替えました！\n\nシフト希望を提出する場合は、リッチメニューから「シフト希望を提出」をタップしてください。` },
+    ],
+  });
+}
 
 // postback処理（希望提出）
 async function handlePostback(event: PostbackEvent) {
@@ -370,6 +405,17 @@ async function handlePostback(event: PostbackEvent) {
     } else if (action === 'change_store') {
       // 店舗を切り替える
       await handleChangeStore(lineUserId, event.replyToken);
+    } else if (action === 'switch_store') {
+      // 店舗切り替え実行
+      const storeId = params.get('store_id');
+      if (!storeId) {
+        await messagingClient.pushMessage({
+          to: lineUserId,
+          messages: [{ type: 'text', text: '店舗情報が取得できませんでした。' }],
+        });
+        return;
+      }
+      await handleSwitchStore(lineUserId, storeId);
     } else if (action === 'select_month') {
       // 選択された月の日付選択フォームを送信
       const year = params.get('year');
