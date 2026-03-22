@@ -2,7 +2,6 @@
 
 import { Suspense, useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase/client';
 import type { ShiftStatus } from '@/constants';
 
 interface ShiftPreference {
@@ -54,49 +53,47 @@ function ShiftSelectContent() {
     return weeks;
   }, [year, month]);
 
-  // 店舗情報取得
+  // 店舗情報取得（API経由）
   useEffect(() => {
     if (!storeId) return;
 
     async function fetchStore() {
-      const { data } = await supabase
-        .from('stores')
-        .select('name')
-        .eq('id', storeId)
-        .single();
-
-      if (data) setStoreName(data.name);
+      try {
+        const res = await fetch(`/api/stores/${storeId}`);
+        const json = await res.json();
+        if (json.data) setStoreName(json.data.name);
+      } catch (err) {
+        console.error('店舗情報取得エラー:', err);
+      }
     }
 
     fetchStore();
   }, [storeId]);
 
-  // 既存の希望を取得
+  // 既存の希望を取得（API経由）
   useEffect(() => {
     if (!userId || !storeId) return;
 
     async function fetchExisting() {
-      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-      const endDate = `${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`;
+      try {
+        const res = await fetch(
+          `/api/shift-preferences?userId=${userId}&storeId=${storeId}&year=${year}&month=${month}`
+        );
+        const json = await res.json();
 
-      const { data } = await supabase
-        .from('shift_preferences')
-        .select('shift_date, status, time_slot')
-        .eq('user_id', userId)
-        .eq('store_id', storeId)
-        .gte('shift_date', startDate)
-        .lte('shift_date', endDate);
-
-      if (data) {
-        const prefs: Record<string, ShiftPreference> = {};
-        data.forEach((p) => {
-          prefs[p.shift_date] = {
-            date: p.shift_date,
-            status: p.status as ShiftStatus,
-            timeSlot: p.time_slot,
-          };
-        });
-        setPreferences(prefs);
+        if (json.data) {
+          const prefs: Record<string, ShiftPreference> = {};
+          json.data.forEach((p: { shift_date: string; status: ShiftStatus; time_slot: string | null }) => {
+            prefs[p.shift_date] = {
+              date: p.shift_date,
+              status: p.status,
+              timeSlot: p.time_slot,
+            };
+          });
+          setPreferences(prefs);
+        }
+      } catch (err) {
+        console.error('希望取得エラー:', err);
       }
     }
 
@@ -159,11 +156,17 @@ function ShiftSelectContent() {
         return;
       }
 
-      const { error: upsertError } = await supabase
-        .from('shift_preferences')
-        .upsert(records, { onConflict: 'user_id,store_id,shift_date' });
+      const res = await fetch('/api/shift-preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preferences: records }),
+      });
 
-      if (upsertError) throw upsertError;
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(json.error || '保存に失敗しました');
+      }
 
       setSaved(true);
     } catch (err) {
