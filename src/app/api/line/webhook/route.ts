@@ -823,7 +823,7 @@ async function savePreference(userId: string, date: string, status: string, time
   });
 }
 
-// シフト希望確認（今月・来月の提出済み希望を表示）
+// シフト希望確認（カレンダー形式で表示）
 async function sendPreferencesSummary(userId: string) {
   const stores = await getUserStores(userId);
   if (stores.length === 0) {
@@ -837,16 +837,13 @@ async function sendPreferencesSummary(userId: string) {
   const storeId = stores[0].store_id;
   const storeName = stores[0].name;
 
-  // 今月と来月の範囲を取得
+  // 今月の希望を取得
   const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth() + 1;
-  const startDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
-
-  const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
-  const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
-  const lastDay = new Date(nextYear, nextMonth, 0).getDate();
-  const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-${lastDay}`;
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
 
   const { data: preferences, error } = await supabase
     .from('shift_preferences')
@@ -866,28 +863,175 @@ async function sendPreferencesSummary(userId: string) {
     return;
   }
 
-  if (!preferences || preferences.length === 0) {
-    await messagingClient.pushMessage({
-      to: userId,
-      messages: [{ type: 'text', text: `📋 ${storeName}\n\n提出済みのシフト希望はありません。\nリッチメニューから「シフト希望を提出」を選択してください。` }],
-    });
-    return;
-  }
-
-  // 希望一覧を文字列で作成
-  const statusIcons: Record<string, string> = { ok: '◯', maybe: '△', no: '×' };
-  const lines = preferences.map(p => {
-    const icon = statusIcons[p.status] || '?';
-    const slot = p.time_slot || '';
-    return `${p.shift_date} ${icon} ${slot}`;
+  // 希望をMapに変換
+  const prefMap: Record<string, { status: string; time_slot: string | null }> = {};
+  preferences?.forEach(p => {
+    prefMap[p.shift_date] = { status: p.status, time_slot: p.time_slot };
   });
 
-  const summaryText = `📋 ${storeName}\n\n【提出済みシフト希望】\n${lines.join('\n')}`;
+  // カレンダーFlex Message生成
+  const flexMessage = buildCalendarFlexMessage(year, month, storeName, prefMap);
 
   await messagingClient.pushMessage({
     to: userId,
-    messages: [{ type: 'text', text: summaryText }],
+    messages: [flexMessage],
   });
+}
+
+// カレンダー形式のFlex Messageを生成
+function buildCalendarFlexMessage(
+  year: number,
+  month: number,
+  storeName: string,
+  prefMap: Record<string, { status: string; time_slot: string | null }>
+): messagingApi.FlexMessage {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+
+  const statusColors: Record<string, string> = {
+    ok: '#22C55E',     // 緑
+    maybe: '#EAB308',  // 黄
+    no: '#EF4444',     // 赤
+  };
+  const statusIcons: Record<string, string> = {
+    ok: '◯',
+    maybe: '△',
+    no: '×',
+  };
+
+  // 週ごとにボタンをグループ化
+  const weeks: messagingApi.FlexBox[] = [];
+  let currentWeek: messagingApi.FlexBox[] = [];
+
+  // 月初の空白を埋める
+  const firstDayOfWeek = new Date(year, month - 1, 1).getDay();
+  for (let i = 0; i < firstDayOfWeek; i++) {
+    currentWeek.push({
+      type: 'box',
+      layout: 'vertical',
+      flex: 1,
+      contents: [
+        { type: 'text', text: ' ', size: 'xs', align: 'center' },
+        { type: 'text', text: ' ', size: 'sm', align: 'center' },
+      ],
+    });
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month - 1, day);
+    const dayOfWeek = date.getDay();
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const pref = prefMap[dateStr];
+
+    const dayColor = dayOfWeek === 0 ? '#EF4444' : dayOfWeek === 6 ? '#3B82F6' : '#374151';
+    const statusIcon = pref ? statusIcons[pref.status] || '-' : '-';
+    const statusColor = pref ? statusColors[pref.status] || '#9CA3AF' : '#9CA3AF';
+    const timeSlot = pref?.time_slot ? pref.time_slot.substring(0, 1) : '';
+
+    currentWeek.push({
+      type: 'box',
+      layout: 'vertical',
+      flex: 1,
+      contents: [
+        { type: 'text', text: String(day), size: 'xs', align: 'center', color: dayColor },
+        { type: 'text', text: statusIcon, size: 'lg', align: 'center', color: statusColor, weight: 'bold' },
+        { type: 'text', text: timeSlot, size: 'xxs', align: 'center', color: '#6B7280' },
+      ],
+    });
+
+    // 7日ごとまたは月末で週を確定
+    if (dayOfWeek === 6 || day === daysInMonth) {
+      // 週の末尾を埋める
+      while (currentWeek.length < 7) {
+        currentWeek.push({
+          type: 'box',
+          layout: 'vertical',
+          flex: 1,
+          contents: [
+            { type: 'text', text: ' ', size: 'xs', align: 'center' },
+            { type: 'text', text: ' ', size: 'sm', align: 'center' },
+          ],
+        });
+      }
+
+      weeks.push({
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'xs',
+        contents: currentWeek,
+      });
+      currentWeek = [];
+    }
+  }
+
+  return {
+    type: 'flex',
+    altText: `${month}月のシフト希望`,
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'text',
+            text: `📋 ${year}年${month}月`,
+            weight: 'bold',
+            size: 'xl',
+            color: '#1DB446',
+          },
+          {
+            type: 'text',
+            text: storeName,
+            size: 'sm',
+            color: '#666666',
+            margin: 'sm',
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            margin: 'lg',
+            contents: weekdays.map((wd, i) => ({
+              type: 'text',
+              text: wd,
+              size: 'xs',
+              align: 'center',
+              color: i === 0 ? '#EF4444' : i === 6 ? '#3B82F6' : '#374151',
+              flex: 1,
+              weight: 'bold',
+            })) as messagingApi.FlexText[],
+          },
+          {
+            type: 'separator',
+            margin: 'sm',
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            spacing: 'xs',
+            margin: 'md',
+            contents: weeks,
+          },
+          {
+            type: 'separator',
+            margin: 'lg',
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            margin: 'md',
+            spacing: 'md',
+            contents: [
+              { type: 'text', text: '◯出勤可', size: 'xs', color: '#22C55E', flex: 1 },
+              { type: 'text', text: '△微妙', size: 'xs', color: '#EAB308', flex: 1 },
+              { type: 'text', text: '×休み', size: 'xs', color: '#EF4444', flex: 1 },
+            ],
+          },
+        ],
+      },
+    },
+  };
 }
 
 async function createAndSetRichMenu(lineUserId: string) {
