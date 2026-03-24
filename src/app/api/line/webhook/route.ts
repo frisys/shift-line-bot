@@ -837,13 +837,22 @@ async function sendPreferencesSummary(userId: string) {
   const storeId = stores[0].store_id;
   const storeName = stores[0].name;
 
-  // 今月の希望を取得
+  // 今月と翌月の希望を取得
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextMonthYear = month === 12 ? year + 1 : year;
+
+  // 今月の範囲
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const lastDay = new Date(year, month, 0).getDate();
   const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
+
+  // 翌月の範囲
+  const nextMonthStartDate = `${nextMonthYear}-${String(nextMonth).padStart(2, '0')}-01`;
+  const nextMonthLastDay = new Date(nextMonthYear, nextMonth, 0).getDate();
+  const nextMonthEndDate = `${nextMonthYear}-${String(nextMonth).padStart(2, '0')}-${nextMonthLastDay}`;
 
   const { data: preferences, error } = await supabase
     .from('shift_preferences')
@@ -851,7 +860,7 @@ async function sendPreferencesSummary(userId: string) {
     .eq('user_id', userId)
     .eq('store_id', storeId)
     .gte('shift_date', startDate)
-    .lte('shift_date', endDate)
+    .lte('shift_date', nextMonthEndDate)
     .order('shift_date', { ascending: true });
 
   if (error) {
@@ -863,28 +872,57 @@ async function sendPreferencesSummary(userId: string) {
     return;
   }
 
-  // 希望をMapに変換
-  const prefMap: Record<string, { status: string; time_slot: string | null }> = {};
+  // 今月と翌月の希望をそれぞれMapに変換
+  const currentMonthPrefMap: Record<string, { status: string; time_slot: string | null }> = {};
+  const nextMonthPrefMap: Record<string, { status: string; time_slot: string | null }> = {};
+
   preferences?.forEach(p => {
-    prefMap[p.shift_date] = { status: p.status, time_slot: p.time_slot };
+    if (p.shift_date >= startDate && p.shift_date <= endDate) {
+      currentMonthPrefMap[p.shift_date] = { status: p.status, time_slot: p.time_slot };
+    } else if (p.shift_date >= nextMonthStartDate && p.shift_date <= nextMonthEndDate) {
+      nextMonthPrefMap[p.shift_date] = { status: p.status, time_slot: p.time_slot };
+    }
   });
 
-  // カレンダーFlex Message生成
-  const flexMessage = buildCalendarFlexMessage(year, month, storeName, prefMap);
+  // 翌月分の希望がある場合はカルーセルで表示
+  const hasNextMonthPreferences = Object.keys(nextMonthPrefMap).length > 0;
 
-  await messagingClient.pushMessage({
-    to: userId,
-    messages: [flexMessage],
-  });
+  if (hasNextMonthPreferences) {
+    // カルーセル形式で今月と翌月を表示
+    const currentMonthBubble = buildCalendarFlexBubble(year, month, storeName, currentMonthPrefMap);
+    const nextMonthBubble = buildCalendarFlexBubble(nextMonthYear, nextMonth, storeName, nextMonthPrefMap);
+
+    const carouselMessage: messagingApi.FlexMessage = {
+      type: 'flex',
+      altText: `${month}月・${nextMonth}月のシフト希望`,
+      contents: {
+        type: 'carousel',
+        contents: [currentMonthBubble, nextMonthBubble],
+      },
+    };
+
+    await messagingClient.pushMessage({
+      to: userId,
+      messages: [carouselMessage],
+    });
+  } else {
+    // 今月のみ表示
+    const flexMessage = buildCalendarFlexMessage(year, month, storeName, currentMonthPrefMap);
+
+    await messagingClient.pushMessage({
+      to: userId,
+      messages: [flexMessage],
+    });
+  }
 }
 
-// カレンダー形式のFlex Messageを生成
-function buildCalendarFlexMessage(
+// カレンダー形式のFlex Bubbleを生成（カルーセル用）
+function buildCalendarFlexBubble(
   year: number,
   month: number,
   storeName: string,
   prefMap: Record<string, { status: string; time_slot: string | null }>
-): messagingApi.FlexMessage {
+): messagingApi.FlexBubble {
   const daysInMonth = new Date(year, month, 0).getDate();
   const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -967,46 +1005,43 @@ function buildCalendarFlexMessage(
   }
 
   return {
-    type: 'flex',
-    altText: `${month}月のシフト希望`,
-    contents: {
-      type: 'bubble',
-      size: 'mega',
-      body: {
-        type: 'box',
-        layout: 'vertical',
-        contents: [
-          {
+    type: 'bubble',
+    size: 'mega',
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      contents: [
+        {
+          type: 'text',
+          text: `📋 ${year}年${month}月`,
+          weight: 'bold',
+          size: 'xl',
+          color: '#1DB446',
+        },
+        {
+          type: 'text',
+          text: storeName,
+          size: 'sm',
+          color: '#666666',
+          margin: 'sm',
+        },
+        {
+          type: 'box',
+          layout: 'horizontal',
+          margin: 'lg',
+          contents: weekdays.map((wd, i) => ({
             type: 'text',
-            text: `📋 ${year}年${month}月`,
+            text: wd,
+            size: 'xs',
+            align: 'center',
+            color: i === 0 ? '#EF4444' : i === 6 ? '#3B82F6' : '#374151',
+            flex: 1,
             weight: 'bold',
-            size: 'xl',
-            color: '#1DB446',
-          },
-          {
-            type: 'text',
-            text: storeName,
-            size: 'sm',
-            color: '#666666',
-            margin: 'sm',
-          },
-          {
-            type: 'box',
-            layout: 'horizontal',
-            margin: 'lg',
-            contents: weekdays.map((wd, i) => ({
-              type: 'text',
-              text: wd,
-              size: 'xs',
-              align: 'center',
-              color: i === 0 ? '#EF4444' : i === 6 ? '#3B82F6' : '#374151',
-              flex: 1,
-              weight: 'bold',
-            })) as messagingApi.FlexText[],
-          },
-          {
-            type: 'separator',
-            margin: 'sm',
+          })) as messagingApi.FlexText[],
+        },
+        {
+          type: 'separator',
+          margin: 'sm',
           },
           {
             type: 'box',
@@ -1032,7 +1067,20 @@ function buildCalendarFlexMessage(
           },
         ],
       },
-    },
+    };
+}
+
+// カレンダー形式のFlex Messageを生成（単月表示用）
+function buildCalendarFlexMessage(
+  year: number,
+  month: number,
+  storeName: string,
+  prefMap: Record<string, { status: string; time_slot: string | null }>
+): messagingApi.FlexMessage {
+  return {
+    type: 'flex',
+    altText: `${month}月のシフト希望`,
+    contents: buildCalendarFlexBubble(year, month, storeName, prefMap),
   };
 }
 
