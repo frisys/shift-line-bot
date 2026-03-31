@@ -120,7 +120,7 @@ async function handleFollow(event: FollowEvent, profile: Profile | { displayName
     messages: [
       {
         type: 'text',
-        text: `こんにちは、${profile.displayName}さん！\nシフト管理Botへようこそ！`,
+        text: `${profile.displayName}さん！お疲れ様です！\nシフト管理君を追加してくれてありがとうございます！`,
       },
       {
         type: 'text',
@@ -151,7 +151,7 @@ async function handleMessage(event: MessageEvent) {
   }
 }
 
-// 店舗番号入力処理
+// 店舗番号入力処理（確認メッセージを表示）
 async function handleStoreCodeInput(lineUserId: string, code: string) {
   const trimmedCode = code.trim(); // スペース除去
   const upperCode = trimmedCode.toUpperCase();
@@ -171,17 +171,109 @@ async function handleStoreCodeInput(lineUserId: string, code: string) {
     console.error('店舗検索失敗:', error?.message || 'レコードなし');
     await messagingClient.pushMessage({
       to: lineUserId,
-      messages: [{ type: 'text', text: '店舗コードが見つかりませんでした。\n入力したコード: ' + trimmedCode + '\nもう一度確認してください！' }],
+      messages: [{ type: 'text', text: '店舗コードが ' + trimmedCode + ' の店舗は見つかりませんでした。\n確認してやり直しをお願いします。' }],
     });
     return;
   }
 
   console.log('店舗発見！ID:', store.id, '名前:', store.name);
 
+  // 登録確認のFlexメッセージ
+  const confirmRegisterMessage: messagingApi.FlexMessage = {
+    type: 'flex',
+    altText: `「${store.name}」を登録しますか？`,
+    contents: {
+      type: 'bubble',
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'text',
+            text: '📋 店舗確認',
+            weight: 'bold',
+            size: 'xl',
+            color: '#1DB446',
+          },
+          {
+            type: 'text',
+            text: `「${store.name}」`,
+            size: 'lg',
+            margin: 'lg',
+            weight: 'bold',
+            wrap: true,
+          },
+          {
+            type: 'text',
+            text: `店舗コード: ${store.store_code}`,
+            size: 'sm',
+            margin: 'sm',
+            color: '#666666',
+          },
+          {
+            type: 'text',
+            text: 'この店舗を登録しますか？',
+            size: 'md',
+            margin: 'lg',
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'md',
+            margin: 'lg',
+            contents: [
+              {
+                type: 'button',
+                action: {
+                  type: 'postback',
+                  label: '登録する',
+                  data: `action=register_store&store_id=${store.id}`,
+                },
+                style: 'primary',
+                color: '#1DB446',
+              },
+              {
+                type: 'button',
+                action: {
+                  type: 'postback',
+                  label: 'やめる',
+                  data: 'action=cancel_register_store',
+                },
+                style: 'secondary',
+              },
+            ],
+          },
+        ],
+      },
+    },
+  };
+
+  await messagingClient.pushMessage({
+    to: lineUserId,
+    messages: [confirmRegisterMessage],
+  });
+}
+
+// 店舗登録実行
+async function handleRegisterStore(lineUserId: string, storeId: string) {
+  // 店舗情報を取得
+  const { data: store, error: storeError } = await supabase
+    .from('stores')
+    .select('id, name')
+    .eq('id', storeId)
+    .single();
+
+  if (storeError || !store) {
+    await messagingClient.pushMessage({
+      to: lineUserId,
+      messages: [{ type: 'text', text: '店舗情報の取得に失敗しました。もう一度店舗コードを入力してください。' }],
+    });
+    return;
+  }
+
   // profilesにLINE userId登録（すでにあればスキップ）
   await supabase.from('profiles').upsert({
     line_user_id: lineUserId,
-    // nameは友達追加時に入ってるはずなので省略可
   }, { onConflict: 'line_user_id' });
 
   // user_storesに登録（staffとして）
@@ -195,17 +287,77 @@ async function handleStoreCodeInput(lineUserId: string, code: string) {
     console.error('user_stores登録エラー:', storesError);
     await messagingClient.pushMessage({
       to: lineUserId,
-      messages: [{ type: 'text', text: '登録に失敗しました。店舗に連絡してください。' }],
+      messages: [{ type: 'text', text: '登録に失敗したので少し時間を空けて初めからやり直してみてください。\n\n何回も失敗する場合はヘルプから問い合わせをお願いします！' }],
     });
     return;
   }
 
+  // 切り替え確認のFlexメッセージ
+  const confirmSwitchMessage: messagingApi.FlexMessage = {
+    type: 'flex',
+    altText: `「${store.name}」への登録が完了しました`,
+    contents: {
+      type: 'bubble',
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'text',
+            text: '🎉 登録完了',
+            weight: 'bold',
+            size: 'xl',
+            color: '#1DB446',
+          },
+          {
+            type: 'text',
+            text: `「${store.name}」を登録しました！`,
+            size: 'md',
+            margin: 'md',
+            wrap: true,
+          },
+          {
+            type: 'text',
+            text: 'この店舗に切り替えますか？',
+            size: 'sm',
+            margin: 'lg',
+            color: '#666666',
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'md',
+            margin: 'lg',
+            contents: [
+              {
+                type: 'button',
+                action: {
+                  type: 'postback',
+                  label: '切り替えて',
+                  data: `action=confirm_switch_store&store_id=${store.id}`,
+                },
+                style: 'primary',
+                color: '#1DB446',
+              },
+              {
+                type: 'button',
+                action: {
+                  type: 'postback',
+                  label: '今のままで',
+                  data: 'action=keep_current_store',
+                },
+                style: 'secondary',
+              },
+            ],
+          },
+        ],
+      },
+    },
+  };
+
   await messagingClient.pushMessage({
     to: lineUserId,
-    messages: [
-      { type: 'text', text: `🎉 「${store.name}」への登録が完了しました！` },
-      { type: 'text', text: 'シフト希望を提出できます。下のメニューから「シフト希望提出」をタップしてください！\n\n💡 他の店舗でも働く場合は、その店舗コードを入力すると追加登録できます。' },
-    ],
+    messages: [confirmSwitchMessage],
   });
 
   // リッチメニュー適用（メニューIDを環境変数から取る）
@@ -340,9 +492,9 @@ async function handleChangeStore(lineUserId: string, replyToken: string) {
   await messagingClient.replyMessage({
     replyToken,
     messages: [
-      { type: 'text', text: '登録済み店舗一覧です。切り替えたい店舗を選択してください。' },
+      { type: 'text', text: 'どの店舗に切替えますか？' },
       flexMessage,
-      { type: 'text', text: '新規店舗を追加したい場合は、新しい店舗コードを入力してください。' },
+      { type: 'text', text: '新しく店舗を追加したい場合は、新しい店舗コードを教えてください。' },
     ],
   });
 }
@@ -405,6 +557,23 @@ async function handlePostback(event: PostbackEvent) {
     } else if (action === 'change_store') {
       // 店舗を切り替える
       await handleChangeStore(lineUserId, event.replyToken);
+    } else if (action === 'register_store') {
+      // 店舗登録実行
+      const storeId = params.get('store_id');
+      if (!storeId) {
+        await messagingClient.pushMessage({
+          to: lineUserId,
+          messages: [{ type: 'text', text: '店舗情報が取得できませんでした。もう一度店舗コードを入力してください。' }],
+        });
+        return;
+      }
+      await handleRegisterStore(lineUserId, storeId);
+    } else if (action === 'cancel_register_store') {
+      // 店舗登録キャンセル
+      await messagingClient.pushMessage({
+        to: lineUserId,
+        messages: [{ type: 'text', text: '登録をキャンセルしました。\n\n別の店舗コードを入力するか、リッチメニューから操作してください。' }],
+      });
     } else if (action === 'switch_store') {
       // 店舗切り替え実行
       const storeId = params.get('store_id');
@@ -416,6 +585,25 @@ async function handlePostback(event: PostbackEvent) {
         return;
       }
       await handleSwitchStore(lineUserId, storeId);
+    } else if (action === 'confirm_switch_store') {
+      // 登録完了後の切り替え確認 → 切り替える
+      const storeId = params.get('store_id');
+      if (!storeId) {
+        await messagingClient.pushMessage({
+          to: lineUserId,
+          messages: [{ type: 'text', text: '店舗情報が取得できませんでした。' }],
+        });
+        return;
+      }
+      await handleSwitchStore(lineUserId, storeId);
+    } else if (action === 'keep_current_store') {
+      // 登録完了後の切り替え確認 → 今のままで
+      await messagingClient.pushMessage({
+        to: lineUserId,
+        messages: [
+          { type: 'text', text: '了解です！現在の店舗のままにしておきますね。\n\n💡 切り替えたくなったらリッチメニューの「店舗切り替え」からいつでも変更できます。' },
+        ],
+      });
     } else if (action === 'select_month') {
       // 選択された月の日付選択フォームを送信
       const year = params.get('year');
@@ -884,13 +1072,31 @@ async function sendPreferencesSummary(userId: string) {
     }
   });
 
+  // 確定状態を取得
+  const currentYearMonth = `${year}-${String(month).padStart(2, '0')}`;
+  const nextYearMonth = `${nextMonthYear}-${String(nextMonth).padStart(2, '0')}`;
+
+  const { data: confirmations } = await supabase
+    .from('shift_confirmations')
+    .select('year_month, is_confirmed')
+    .eq('store_id', storeId)
+    .in('year_month', [currentYearMonth, nextYearMonth]);
+
+  const confirmationMap: Record<string, boolean> = {};
+  confirmations?.forEach(c => {
+    confirmationMap[c.year_month] = c.is_confirmed;
+  });
+
+  const isCurrentMonthConfirmed = confirmationMap[currentYearMonth] ?? false;
+  const isNextMonthConfirmed = confirmationMap[nextYearMonth] ?? false;
+
   // 翌月分の希望がある場合はカルーセルで表示
   const hasNextMonthPreferences = Object.keys(nextMonthPrefMap).length > 0;
 
   if (hasNextMonthPreferences) {
     // カルーセル形式で今月と翌月を表示
-    const currentMonthBubble = buildCalendarFlexBubble(year, month, storeName, currentMonthPrefMap);
-    const nextMonthBubble = buildCalendarFlexBubble(nextMonthYear, nextMonth, storeName, nextMonthPrefMap);
+    const currentMonthBubble = buildCalendarFlexBubble(year, month, storeName, currentMonthPrefMap, isCurrentMonthConfirmed);
+    const nextMonthBubble = buildCalendarFlexBubble(nextMonthYear, nextMonth, storeName, nextMonthPrefMap, isNextMonthConfirmed);
 
     const carouselMessage: messagingApi.FlexMessage = {
       type: 'flex',
@@ -907,7 +1113,7 @@ async function sendPreferencesSummary(userId: string) {
     });
   } else {
     // 今月のみ表示
-    const flexMessage = buildCalendarFlexMessage(year, month, storeName, currentMonthPrefMap);
+    const flexMessage = buildCalendarFlexMessage(year, month, storeName, currentMonthPrefMap, isCurrentMonthConfirmed);
 
     await messagingClient.pushMessage({
       to: userId,
@@ -921,7 +1127,8 @@ function buildCalendarFlexBubble(
   year: number,
   month: number,
   storeName: string,
-  prefMap: Record<string, { status: string; time_slot: string | null }>
+  prefMap: Record<string, { status: string; time_slot: string | null }>,
+  isConfirmed: boolean = false
 ): messagingApi.FlexBubble {
   const daysInMonth = new Date(year, month, 0).getDate();
   const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
@@ -1004,6 +1211,44 @@ function buildCalendarFlexBubble(
     }
   }
 
+  // タイトル部分（確定状態に応じて変更）
+  const titleContents: messagingApi.FlexComponent[] = isConfirmed
+    ? [
+        {
+          type: 'text',
+          text: `📋 ${year}年${month}月`,
+          weight: 'bold',
+          size: 'xl',
+          color: '#1DB446',
+          flex: 0,
+        },
+        {
+          type: 'text',
+          text: '確定',
+          weight: 'bold',
+          size: 'sm',
+          color: '#FFFFFF',
+          align: 'center',
+          gravity: 'center',
+          margin: 'md',
+          backgroundColor: '#1DB446',
+          cornerRadius: 'md',
+          paddingStart: 'sm',
+          paddingEnd: 'sm',
+          paddingTop: 'xxs',
+          paddingBottom: 'xxs',
+        },
+      ]
+    : [
+        {
+          type: 'text',
+          text: `📋 ${year}年${month}月`,
+          weight: 'bold',
+          size: 'xl',
+          color: '#1DB446',
+        },
+      ];
+
   return {
     type: 'bubble',
     size: 'mega',
@@ -1012,11 +1257,9 @@ function buildCalendarFlexBubble(
       layout: 'vertical',
       contents: [
         {
-          type: 'text',
-          text: `📋 ${year}年${month}月`,
-          weight: 'bold',
-          size: 'xl',
-          color: '#1DB446',
+          type: 'box',
+          layout: 'horizontal',
+          contents: titleContents,
         },
         {
           type: 'text',
@@ -1075,12 +1318,13 @@ function buildCalendarFlexMessage(
   year: number,
   month: number,
   storeName: string,
-  prefMap: Record<string, { status: string; time_slot: string | null }>
+  prefMap: Record<string, { status: string; time_slot: string | null }>,
+  isConfirmed: boolean = false
 ): messagingApi.FlexMessage {
   return {
     type: 'flex',
-    altText: `${month}月のシフト希望`,
-    contents: buildCalendarFlexBubble(year, month, storeName, prefMap),
+    altText: `${month}月のシフト${isConfirmed ? '（確定）' : '希望'}`,
+    contents: buildCalendarFlexBubble(year, month, storeName, prefMap, isConfirmed),
   };
 }
 
