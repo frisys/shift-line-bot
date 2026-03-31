@@ -1223,20 +1223,25 @@ function buildCalendarFlexBubble(
           flex: 0,
         },
         {
-          type: 'text',
-          text: '確定',
-          weight: 'bold',
-          size: 'sm',
-          color: '#FFFFFF',
-          align: 'center',
-          gravity: 'center',
-          margin: 'md',
+          type: 'box',
+          layout: 'vertical',
+          contents: [
+            {
+              type: 'text',
+              text: '確定',
+              weight: 'bold',
+              size: 'sm',
+              color: '#FFFFFF',
+              align: 'center',
+            },
+          ],
           backgroundColor: '#1DB446',
           cornerRadius: 'md',
           paddingStart: 'sm',
           paddingEnd: 'sm',
           paddingTop: 'xxs',
           paddingBottom: 'xxs',
+          margin: 'md',
         },
       ]
     : [
