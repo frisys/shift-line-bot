@@ -25,6 +25,10 @@ function ShiftSelectContent() {
   const [error, setError] = useState<string | null>(null);
   const [storeName, setStoreName] = useState<string>('');
 
+  const prevYear = month === 1 ? year - 1 : year;
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevMonthUrl = `/shift-select?year=${prevYear}&month=${prevMonth}&userId=${userId}&storeId=${storeId}`;
+
   // カレンダーデータ生成
   const calendarData = useMemo(() => {
     const daysInMonth = new Date(year, month, 0).getDate();
@@ -130,6 +134,30 @@ function ShiftSelectContent() {
     setSaved(false);
   };
 
+  const handleReset = () => {
+    setPreferences({});
+    setSaved(false);
+  };
+
+  const handleSetAllWeekday = (weekdayIndex: number) => {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    setPreferences((prev) => {
+      const updated = { ...prev };
+      for (let day = 1; day <= daysInMonth; day++) {
+        if (new Date(year, month - 1, day).getDay() === weekdayIndex) {
+          const dateStr = getDateString(day);
+          updated[dateStr] = {
+            date: dateStr,
+            status: 'ok',
+            timeSlot: prev[dateStr]?.timeSlot || null,
+          };
+        }
+      }
+      return updated;
+    });
+    setSaved(false);
+  };
+
   const handleSave = async () => {
     if (!userId || !storeId) {
       setError('ユーザーIDまたは店舗IDが指定されていません');
@@ -224,6 +252,14 @@ function ShiftSelectContent() {
           {storeName && (
             <p className="text-center text-gray-700 mt-1">{storeName}</p>
           )}
+          <div className="mt-3 flex justify-center">
+            <a
+              href={prevMonthUrl}
+              className="text-sm text-blue-600 underline"
+            >
+              ← {prevYear}年{prevMonth}月を確認
+            </a>
+          </div>
         </div>
 
         {/* 凡例 */}
@@ -242,6 +278,28 @@ function ShiftSelectContent() {
               <span className="w-6 h-6 rounded bg-red-500 text-white flex items-center justify-center text-xs">×</span>
               <span className="text-gray-800">休み</span>
             </span>
+          </div>
+        </div>
+
+        {/* 曜日一括◯ */}
+        <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
+          <p className="text-sm text-gray-700 mb-2">曜日をタップすると全日程を◯にします</p>
+          <div className="grid grid-cols-7 gap-1">
+            {WEEKDAYS.map((wd, i) => (
+              <button
+                key={wd}
+                onClick={() => handleSetAllWeekday(i)}
+                className={`py-2 rounded-lg text-sm font-bold ${
+                  i === 0
+                    ? 'bg-red-100 text-red-600 active:bg-red-200'
+                    : i === 6
+                    ? 'bg-blue-100 text-blue-600 active:bg-blue-200'
+                    : 'bg-gray-100 text-gray-700 active:bg-gray-200'
+                }`}
+              >
+                {wd}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -345,18 +403,26 @@ function ShiftSelectContent() {
           </div>
         )}
 
-        {/* 保存ボタン */}
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className={`w-full py-4 rounded-xl font-bold text-lg shadow-lg transition-colors ${
-            saving
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-green-500 hover:bg-green-600 text-white'
-          }`}
-        >
-          {saving ? '保存中...' : '💾 シフト希望を保存'}
-        </button>
+        {/* 保存・リセットボタン */}
+        <div className="flex gap-3">
+          <button
+            onClick={handleReset}
+            className="flex-1 py-4 rounded-xl font-bold text-lg shadow-lg bg-gray-200 hover:bg-gray-300 text-gray-700 transition-colors"
+          >
+            🔄 リセット
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className={`flex-2 w-full py-4 rounded-xl font-bold text-lg shadow-lg transition-colors ${
+              saving
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-green-500 hover:bg-green-600 text-white'
+            }`}
+          >
+            {saving ? '保存中...' : '💾 シフト希望を保存'}
+          </button>
+        </div>
 
         {/* 選択数サマリー */}
         <div className="mt-4 text-center text-sm text-gray-800">

@@ -228,6 +228,7 @@ async function handleStoreCodeInput(lineUserId: string, code: string) {
                   type: 'postback',
                   label: '登録する',
                   data: `action=register_store&store_id=${store.id}`,
+                  displayText: '登録する',
                 },
                 style: 'primary',
                 color: '#1DB446',
@@ -238,6 +239,7 @@ async function handleStoreCodeInput(lineUserId: string, code: string) {
                   type: 'postback',
                   label: 'やめる',
                   data: 'action=cancel_register_store',
+                  displayText: 'やめる',
                 },
                 style: 'secondary',
               },
@@ -335,6 +337,7 @@ async function handleRegisterStore(lineUserId: string, storeId: string) {
                   type: 'postback',
                   label: '切り替えて',
                   data: `action=confirm_switch_store&store_id=${store.id}`,
+                  displayText: '切り替えて',
                 },
                 style: 'primary',
                 color: '#1DB446',
@@ -345,6 +348,7 @@ async function handleRegisterStore(lineUserId: string, storeId: string) {
                   type: 'postback',
                   label: '今のままで',
                   data: 'action=keep_current_store',
+                  displayText: '今のままで',
                 },
                 style: 'secondary',
               },
@@ -561,8 +565,8 @@ async function handlePostback(event: PostbackEvent) {
       // 店舗登録実行
       const storeId = params.get('store_id');
       if (!storeId) {
-        await messagingClient.pushMessage({
-          to: lineUserId,
+        await messagingClient.replyMessage({
+          replyToken: event.replyToken,
           messages: [{ type: 'text', text: '店舗情報が取得できませんでした。もう一度店舗コードを入力してください。' }],
         });
         return;
