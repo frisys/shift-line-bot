@@ -360,8 +360,8 @@ async function handleRegisterStore(lineUserId: string, storeId: string) {
     messages: [confirmSwitchMessage],
   });
 
-  // リッチメニュー適用（メニューIDを環境変数から取る）
-  await messagingClient.setDefaultRichMenu(process.env.LINE_RICH_MENU_ID!);
+  // リッチメニュー適用（ユーザーごとに作成・紐付け）
+  await createAndSetRichMenu(lineUserId);
 }
 
 // Flex Messageメニュー送信例
