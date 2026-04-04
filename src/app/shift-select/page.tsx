@@ -139,18 +139,33 @@ function ShiftSelectContent() {
     setSaved(false);
   };
 
-  const handleSetAllWeekday = (weekdayIndex: number) => {
+  const isWeekdayAllOk = (weekdayIndex: number): boolean => {
     const daysInMonth = new Date(year, month, 0).getDate();
+    for (let day = 1; day <= daysInMonth; day++) {
+      if (new Date(year, month - 1, day).getDay() === weekdayIndex) {
+        if (preferences[getDateString(day)]?.status !== 'ok') return false;
+      }
+    }
+    return true;
+  };
+
+  const handleToggleWeekday = (weekdayIndex: number) => {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const isActive = isWeekdayAllOk(weekdayIndex);
     setPreferences((prev) => {
       const updated = { ...prev };
       for (let day = 1; day <= daysInMonth; day++) {
         if (new Date(year, month - 1, day).getDay() === weekdayIndex) {
           const dateStr = getDateString(day);
-          updated[dateStr] = {
-            date: dateStr,
-            status: 'ok',
-            timeSlot: prev[dateStr]?.timeSlot || null,
-          };
+          if (isActive) {
+            delete updated[dateStr];
+          } else {
+            updated[dateStr] = {
+              date: dateStr,
+              status: 'ok',
+              timeSlot: prev[dateStr]?.timeSlot || null,
+            };
+          }
         }
       }
       return updated;
@@ -281,42 +296,30 @@ function ShiftSelectContent() {
           </div>
         </div>
 
-        {/* 曜日一括◯ */}
-        <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
-          <p className="text-sm text-gray-700 mb-2">曜日をタップすると全日程を◯にします</p>
-          <div className="grid grid-cols-7 gap-1">
-            {WEEKDAYS.map((wd, i) => (
-              <button
-                key={wd}
-                onClick={() => handleSetAllWeekday(i)}
-                className={`py-2 rounded-lg text-sm font-bold ${
-                  i === 0
-                    ? 'bg-red-100 text-red-600 active:bg-red-200'
-                    : i === 6
-                    ? 'bg-blue-100 text-blue-600 active:bg-blue-200'
-                    : 'bg-gray-100 text-gray-700 active:bg-gray-200'
-                }`}
-              >
-                {wd}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* カレンダー */}
         <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
-          {/* 曜日ヘッダー */}
+          {/* 曜日ヘッダー（タップで一括◯/解除） */}
           <div className="grid grid-cols-7 gap-1 mb-2">
-            {WEEKDAYS.map((wd, i) => (
-              <div
-                key={wd}
-                className={`text-center text-sm font-bold py-1 ${
-                  i === 0 ? 'text-red-600' : i === 6 ? 'text-blue-600' : 'text-gray-800'
-                }`}
-              >
-                {wd}
-              </div>
-            ))}
+            {WEEKDAYS.map((wd, i) => {
+              const active = isWeekdayAllOk(i);
+              return (
+                <button
+                  key={wd}
+                  onClick={() => handleToggleWeekday(i)}
+                  className={`text-center text-sm font-bold py-1 rounded transition-colors ${
+                    active
+                      ? 'bg-green-500 text-white'
+                      : i === 0
+                      ? 'text-red-600'
+                      : i === 6
+                      ? 'text-blue-600'
+                      : 'text-gray-800'
+                  }`}
+                >
+                  {wd}
+                </button>
+              );
+            })}
           </div>
 
           {/* 日付 */}
