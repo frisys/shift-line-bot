@@ -172,31 +172,39 @@ function ShiftSelectContent() {
     setSaved(false);
   };
 
-  const isWeekdayAllOk = (weekdayIndex: number): boolean => {
+  // その曜日の全日程が同一ステータスならそれを返す。バラバラならnull
+  const getWeekdayUniformStatus = (weekdayIndex: number): ShiftStatus | null => {
     const daysInMonth = new Date(year, month, 0).getDate();
+    let found: ShiftStatus | null | undefined = undefined;
     for (let day = 1; day <= daysInMonth; day++) {
       if (new Date(year, month - 1, day).getDay() === weekdayIndex) {
-        if (preferences[getDateString(day)]?.status !== 'ok') return false;
+        const s = preferences[getDateString(day)]?.status ?? null;
+        if (found === undefined) found = s;
+        else if (found !== s) return null;
       }
     }
-    return true;
+    return found ?? null;
   };
 
   const handleToggleWeekday = (weekdayIndex: number) => {
     const daysInMonth = new Date(year, month, 0).getDate();
-    const isActive = isWeekdayAllOk(weekdayIndex);
+    const current = getWeekdayUniformStatus(weekdayIndex);
+    const cycle: (ShiftStatus | null)[] = ['ok', 'maybe', 'no', null];
+    const currentIdx = cycle.indexOf(current);
+    // バラバラ(null返却だが cycle上は存在)→okから始める
+    const nextStatus = cycle[(currentIdx + 1) % cycle.length];
     setPreferences((prev) => {
       const updated = { ...prev };
       for (let day = 1; day <= daysInMonth; day++) {
         if (new Date(year, month - 1, day).getDay() === weekdayIndex) {
           const dateStr = getDateString(day);
-          if (isActive) {
+          if (nextStatus === null) {
             delete updated[dateStr];
           } else {
             updated[dateStr] = {
               date: dateStr,
-              status: 'ok',
-              timeSlot: prev[dateStr]?.timeSlot || null,
+              status: nextStatus,
+              timeSlot: nextStatus === 'no' ? null : prev[dateStr]?.timeSlot || null,
             };
           }
         }
@@ -386,7 +394,7 @@ function ShiftSelectContent() {
         {/* 凡例 */}
         <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
           <p className="text-sm text-gray-800 mb-2">各日付をタップして希望を選択してください</p>
-          <div className="flex justify-center gap-4 text-sm">
+          <div className="flex justify-center gap-4 text-sm flex-wrap">
             <span className="flex items-center gap-1">
               <span className="w-6 h-6 rounded bg-green-500 text-white flex items-center justify-center text-xs">◯</span>
               <span className="text-gray-800">出勤可</span>
@@ -399,6 +407,10 @@ function ShiftSelectContent() {
               <span className="w-6 h-6 rounded bg-red-500 text-white flex items-center justify-center text-xs">×</span>
               <span className="text-gray-800">休み</span>
             </span>
+            <span className="flex items-center gap-1">
+              <span className="w-6 h-6 rounded bg-gray-200 text-gray-700 flex items-center justify-center text-xs">−</span>
+              <span className="text-gray-800">希望なし</span>
+            </span>
           </div>
         </div>
 
@@ -408,20 +420,19 @@ function ShiftSelectContent() {
           {/* 曜日ヘッダー（タップで一括◯/解除） */}
           <div className="grid grid-cols-7 gap-1 mb-2">
             {WEEKDAYS.map((wd, i) => {
-              const active = isWeekdayAllOk(i);
+              const status = getWeekdayUniformStatus(i);
+              const activeClass =
+                status === 'ok' ? 'bg-green-500 text-white' :
+                status === 'maybe' ? 'bg-yellow-400 text-black' :
+                status === 'no' ? 'bg-red-500 text-white' :
+                i === 0 ? 'text-red-600' :
+                i === 6 ? 'text-blue-600' :
+                'text-gray-800';
               return (
                 <button
                   key={wd}
                   onClick={() => handleToggleWeekday(i)}
-                  className={`text-center text-sm font-bold py-1 rounded transition-colors ${
-                    active
-                      ? 'bg-green-500 text-white'
-                      : i === 0
-                      ? 'text-red-600'
-                      : i === 6
-                      ? 'text-blue-600'
-                      : 'text-gray-800'
-                  }`}
+                  className={`text-center text-sm font-bold py-1 rounded transition-colors ${activeClass}`}
                 >
                   {wd}
                 </button>
