@@ -25,9 +25,42 @@ function ShiftSelectContent() {
   const [error, setError] = useState<string | null>(null);
   const [storeName, setStoreName] = useState<string>('');
 
-  const prevYear = month === 1 ? year - 1 : year;
-  const prevMonth = month === 1 ? 12 : month - 1;
-  const prevMonthUrl = `/shift-select?year=${prevYear}&month=${prevMonth}&userId=${userId}&storeId=${storeId}`;
+  // 過去シフト確認モーダル
+  const pastMonthOptions = useMemo(() => {
+    const options: { label: string; year: number; month: number }[] = [];
+    for (let i = 1; i <= 12; i++) {
+      const d = new Date(year, month - 1 - i, 1);
+      options.push({ label: `${d.getFullYear()}年${d.getMonth() + 1}月`, year: d.getFullYear(), month: d.getMonth() + 1 });
+    }
+    return options;
+  }, [year, month]);
+  const [selectedPast, setSelectedPast] = useState(`${pastMonthOptions[0].year}-${pastMonthOptions[0].month}`);
+  const [showPastModal, setShowPastModal] = useState(false);
+  const [pastPreferences, setPastPreferences] = useState<Record<string, ShiftPreference>>({});
+  const [pastLoading, setPastLoading] = useState(false);
+
+  const openPastModal = async () => {
+    const [y, m] = selectedPast.split('-').map(Number);
+    setPastLoading(true);
+    setShowPastModal(true);
+    try {
+      const res = await fetch(`/api/shift-preferences?userId=${userId}&storeId=${storeId}&year=${y}&month=${m}`);
+      const json = await res.json();
+      if (json.data) {
+        const prefs: Record<string, ShiftPreference> = {};
+        json.data.forEach((p: { shift_date: string; status: ShiftStatus; time_slot: string | null }) => {
+          prefs[p.shift_date] = { date: p.shift_date, status: p.status, timeSlot: p.time_slot };
+        });
+        setPastPreferences(prefs);
+      } else {
+        setPastPreferences({});
+      }
+    } catch {
+      setPastPreferences({});
+    } finally {
+      setPastLoading(false);
+    }
+  };
 
   // カレンダーデータ生成
   const calendarData = useMemo(() => {
@@ -245,6 +278,69 @@ function ShiftSelectContent() {
     }
   };
 
+  const PastModal = () => {
+    const [y, m] = selectedPast.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const firstDayOfWeek = new Date(y, m - 1, 1).getDay();
+    const days: (number | null)[] = [];
+    for (let i = 0; i < firstDayOfWeek; i++) days.push(null);
+    for (let d = 1; d <= daysInMonth; d++) days.push(d);
+    while (days.length % 7 !== 0) days.push(null);
+    const weeks: (number | null)[][] = [];
+    for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="flex items-center justify-between p-4 border-b">
+            <h2 className="text-lg font-bold text-gray-900">{y}年{m}月 シフト希望</h2>
+            <button
+              onClick={() => setShowPastModal(false)}
+              className="text-gray-500 text-2xl leading-none px-2"
+            >
+              ×
+            </button>
+          </div>
+          <div className="p-4">
+            {pastLoading ? (
+              <p className="text-center text-gray-500 py-8">読み込み中...</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {WEEKDAYS.map((wd, i) => (
+                    <div key={wd} className={`text-center text-sm font-bold py-1 ${i === 0 ? 'text-red-600' : i === 6 ? 'text-blue-600' : 'text-gray-800'}`}>{wd}</div>
+                  ))}
+                </div>
+                {weeks.map((week, wi) => (
+                  <div key={wi} className="grid grid-cols-7 gap-1 mb-1">
+                    {week.map((day, di) => {
+                      if (day === null) return <div key={di} className="min-h-[56px]" />;
+                      const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                      const pref = pastPreferences[dateStr];
+                      const dow = new Date(y, m - 1, day).getDay();
+                      return (
+                        <div key={di} className="min-h-[56px] flex flex-col border rounded-lg overflow-hidden">
+                          <div className={`text-xs text-center py-0.5 ${dow === 0 ? 'bg-red-50 text-red-600' : dow === 6 ? 'bg-blue-50 text-blue-600' : 'bg-gray-50 text-gray-900'}`}>{day}</div>
+                          <div className={`flex-1 flex flex-col items-center justify-center text-sm font-bold ${getStatusColor(pref?.status || null)}`}>
+                            <span>{getStatusLabel(pref?.status || null)}</span>
+                            {pref?.timeSlot && <span className="text-xs font-normal">{pref.timeSlot}</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+                {Object.keys(pastPreferences).length === 0 && (
+                  <p className="text-center text-gray-500 py-4">この月のシフト希望はありません</p>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (!userId || !storeId) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
@@ -258,6 +354,7 @@ function ShiftSelectContent() {
 
   return (
     <div className="min-h-screen bg-gray-100 py-6 px-4">
+      {showPastModal && <PastModal />}
       <div className="max-w-lg mx-auto">
         {/* ヘッダー */}
         <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
@@ -267,13 +364,22 @@ function ShiftSelectContent() {
           {storeName && (
             <p className="text-center text-gray-700 mt-1">{storeName}</p>
           )}
-          <div className="mt-3 flex justify-center">
-            <a
-              href={prevMonthUrl}
-              className="text-sm text-blue-600 underline"
+          <div className="mt-3 flex gap-2 items-center">
+            <select
+              value={selectedPast}
+              onChange={(e) => setSelectedPast(e.target.value)}
+              className="flex-1 border rounded-lg px-2 py-2 text-sm text-gray-800"
             >
-              ← {prevYear}年{prevMonth}月を確認
-            </a>
+              {pastMonthOptions.map((o) => (
+                <option key={`${o.year}-${o.month}`} value={`${o.year}-${o.month}`}>{o.label}</option>
+              ))}
+            </select>
+            <button
+              onClick={openPastModal}
+              className="px-4 py-2 bg-blue-500 text-white text-sm font-bold rounded-lg"
+            >
+              確認する
+            </button>
           </div>
         </div>
 
@@ -298,6 +404,7 @@ function ShiftSelectContent() {
 
         {/* カレンダー */}
         <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
+          <p className="text-xs text-gray-500 mb-2">曜日をタップすると全日程を◯/解除できます</p>
           {/* 曜日ヘッダー（タップで一括◯/解除） */}
           <div className="grid grid-cols-7 gap-1 mb-2">
             {WEEKDAYS.map((wd, i) => {
