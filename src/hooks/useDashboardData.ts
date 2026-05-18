@@ -18,9 +18,13 @@ export function useDashboardData() {
   useEffect(() => {
     async function initLoad() {
       setLoading(true);
+      console.log('[useDashboardData] initLoad: 開始');
       try {
+        console.log('[useDashboardData] supabase.auth.getSession: 開始');
         const { data: { session } } = await supabase.auth.getSession();
+        console.log('[useDashboardData] supabase.auth.getSession: 完了', { userId: session?.user?.id });
         if (!session?.user) {
+          console.log('[useDashboardData] セッションなし → /login へリダイレクト');
           window.location.href = '/login';
           return;
         }
@@ -31,14 +35,17 @@ export function useDashboardData() {
         };
         setUser(currentUser);
 
+        console.log('[useDashboardData] stores 取得: 開始', { owner_user_id: currentUser.id });
         const { data: storeData, error: storeError } = await supabase
           .from('stores')
           .select('*')
           .eq('owner_user_id', currentUser.id);
+        console.log('[useDashboardData] stores 取得: 完了', { count: storeData?.length, error: storeError });
 
         if (storeError) throw storeError;
 
         if (!storeData?.length) {
+          console.warn('[useDashboardData] 店舗が見つかりません');
           setErrorMsg('店舗が見つかりません');
           return;
         }
@@ -49,11 +56,14 @@ export function useDashboardData() {
         const saved = localStorage.getItem('selectedStoreId');
         const initial = saved ? storeData.find(s => s.id === saved) : storeData[0];
         const activeId = initial?.id || storeData[0].id;
+        console.log('[useDashboardData] selectedStoreId を設定:', activeId);
         setSelectedStoreId(activeId);
       } catch (err: unknown) {
+        console.error('[useDashboardData] initLoad エラー:', err);
         setErrorMsg(err instanceof Error ? err.message : '初期ロードに失敗しました');
       } finally {
         setLoading(false);
+        console.log('[useDashboardData] initLoad: 終了');
       }
     }
 
@@ -66,54 +76,48 @@ export function useDashboardData() {
 
     async function fetchStoreData() {
       setLoading(true);
+      console.log('[useDashboardData] fetchStoreData: 開始', { selectedStoreId });
       try {
-        // スタッフ
-        const { data: memberships } = await supabase
-          .from('user_stores')
-          .select('user_id, line_user_id, role, max_consecutive_days, max_weekly_days, unavailable_days, preferred_time_slots')
-          .eq('store_id', selectedStoreId);
-
-        const userIds = memberships?.map(m => m.user_id) || [];
-
-        const { data: profilesData } = await supabase
-          .from('profiles')
-          .select('id, name')
-          .in('id', userIds);
-
-        const staffList: Staff[] = profilesData?.map(p => {
-          const mem = memberships?.find(m => m.user_id === p.id);
-          return {
-            id: p.id,
-            name: p.name,
-            role: mem?.role || 'staff',
-            store_id: selectedStoreId || '',
-            line_user_id: mem?.line_user_id || '',
-            max_consecutive_days: mem?.max_consecutive_days ?? 5,
-            max_weekly_days: mem?.max_weekly_days ?? 5,
-            unavailable_days: mem?.unavailable_days ?? [],
-            preferred_time_slots: mem?.preferred_time_slots ?? [],
-          };
-        }) || [];
-
+        // スタッフ（user_stores は RLS でクライアントから読めないため API 経由）
+        console.log('[useDashboardData] staff API 取得: 開始', { store_id: selectedStoreId });
+        const { data: { session } } = await supabase.auth.getSession();
+        const staffRes = await fetch(`/api/stores/${selectedStoreId}/staff`, {
+          headers: { Authorization: `Bearer ${session?.access_token}` },
+        });
+        if (!staffRes.ok) {
+          throw new Error(`staff API エラー: ${staffRes.status}`);
+        }
+        const { staff: staffList } = await staffRes.json() as { staff: Staff[] };
+        console.log('[useDashboardData] staff API 取得: 完了', { count: staffList.length });
         setStaff(staffList);
 
-        // シフト希望
-        const { data: prefs } = await supabase
+        // シフト希望（前月〜3ヶ月先まで取得）
+        const today = new Date();
+        const startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+          .toISOString().split('T')[0];
+        const endDate = new Date(today.getFullYear(), today.getMonth() + 4, 0)
+          .toISOString().split('T')[0];
+
+        console.log('[useDashboardData] shift_preferences 取得: 開始', { store_id: selectedStoreId, startDate, endDate });
+        const { data: prefs, error: prefsError } = await supabase
           .from('shift_preferences')
           .select('*')
           .eq('store_id', selectedStoreId)
-          .gte('shift_date', '2026-01-01')
-          .lte('shift_date', '2026-01-31');
+          .gte('shift_date', startDate)
+          .lte('shift_date', endDate);
+        console.log('[useDashboardData] shift_preferences 取得: 完了', { count: prefs?.length, error: prefsError });
 
         const prefUserIds = [...new Set(prefs?.map(p => p.user_id) || [])];
-        const { data: nameData } = await supabase
+        console.log('[useDashboardData] profiles (シフト希望者名) 取得: 開始', { prefUserIds });
+        const { data: nameData, error: nameError } = await supabase
           .from('profiles')
-          .select('id, name')
-          .in('id', prefUserIds);
+          .select('id, name, line_user_id')
+          .in('line_user_id', prefUserIds);
+        console.log('[useDashboardData] profiles (シフト希望者名) 取得: 完了', { count: nameData?.length, error: nameError });
 
         const nameMap: Record<string, string> = {};
         nameData?.forEach(n => {
-          nameMap[n.id] = n.name || '不明';
+          nameMap[n.line_user_id] = n.name || '不明';
         });
 
         const enrichedPrefs: ShiftPreference[] = prefs?.map(p => ({
@@ -121,11 +125,14 @@ export function useDashboardData() {
           profiles: { name: nameMap[p.user_id] || '不明' }
         })) || [];
 
+        console.log('[useDashboardData] enrichedPrefs 構築完了:', { count: enrichedPrefs.length });
         setPreferences(enrichedPrefs);
       } catch (err: unknown) {
+        console.error('[useDashboardData] fetchStoreData エラー:', err);
         setErrorMsg(err instanceof Error ? err.message : '店舗データ取得に失敗しました');
       } finally {
         setLoading(false);
+        console.log('[useDashboardData] fetchStoreData: 終了');
       }
     }
 
@@ -138,6 +145,7 @@ export function useDashboardData() {
     selectedStoreId,
     setSelectedStoreId,
     staff,
+    setStaff,
     preferences,
     loading,
     errorMsg,

@@ -1,18 +1,13 @@
 import { supabase } from '@/lib/supabase/client';
 import type { Staff } from '@/types';
 
-/**
- * スタッフのプロフィール（名前）を更新
- */
 export async function updateStaffProfile(staffId: string, data: { name: string }) {
   return supabase.from('profiles').update(data).eq('id', staffId);
 }
 
-/**
- * スタッフの店舗設定（役割、勤務制約など）を更新
- */
+// user_stores の RLS はスタッフ本人しか更新できないため、サービスロールキーを持つ API 経由で更新する
 export async function updateStaffStoreSettings(
-  userId: string,
+  lineUserId: string,
   storeId: string,
   data: Partial<
     Pick<
@@ -21,9 +16,23 @@ export async function updateStaffStoreSettings(
     >
   >
 ) {
-  return supabase
-    .from('user_stores')
-    .update(data)
-    .eq('user_id', userId)
-    .eq('store_id', storeId);
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) return { error: new Error('Not authenticated') };
+
+  const res = await fetch(`/api/stores/${storeId}/staff`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ lineUserId, ...data }),
+  });
+
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    return { error: new Error(json.error ?? `HTTP ${res.status}`) };
+  }
+
+  return { error: null };
 }

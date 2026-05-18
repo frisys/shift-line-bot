@@ -941,7 +941,21 @@ async function sendStatusPicker(userId: string, date: string) {
 }
 
 async function sendTimeSlotPicker(userId: string, date: string, status: string) {
-  const timeSlots = ['早番', '日勤', '遅番', '夜勤', 'フル', '休み希望'];
+  const DEFAULT_SLOTS = ['早番', '日勤', '遅番', '夜勤', 'フル'];
+
+  // 店舗に設定された勤務区分を取得（未設定ならデフォルト）
+  const stores = await getUserStores(userId);
+  let timeSlots = DEFAULT_SLOTS;
+  if (stores.length > 0) {
+    const { data: storeData } = await supabase
+      .from('stores')
+      .select('time_slots')
+      .eq('id', stores[0].store_id)
+      .single();
+    if (storeData?.time_slots?.length) {
+      timeSlots = storeData.time_slots;
+    }
+  }
 
   const buttons: messagingApi.FlexButton[] = timeSlots.map(slot => ({
     type: 'button',

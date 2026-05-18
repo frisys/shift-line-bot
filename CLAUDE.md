@@ -1,6 +1,7 @@
 # CLAUDE.md
 
 このファイルはClaude Code (claude.ai/code) がこのリポジトリで作業する際のガイドです。
+VisualStudioCodeはClaude Codeが操作を完了したのちにその出力をレビューします。
 
 ## プロジェクト概要
 
