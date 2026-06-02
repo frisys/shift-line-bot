@@ -7,6 +7,25 @@ import toast from 'react-hot-toast';
 import { DAYS_ORDER, getJapaneseWeekday } from '@/constants';
 import { updateRequiredStaff } from '@/services';
 import ShiftSlotsSettings from './ShiftSlotsSettings';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import TextField from '@mui/material/TextField';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Stack from '@mui/material/Stack';
+import Divider from '@mui/material/Divider';
+import CircularProgress from '@mui/material/CircularProgress';
+import EditIcon from '@mui/icons-material/Edit';
 
 interface StoreSummaryProps {
   selectedStoreId: string | null;
@@ -110,184 +129,181 @@ export default function StoreSummary({ selectedStoreId, stores, onUpdateStores }
   );
 
   return (
-    <section className="mb-10">
-      <h2 className="text-xl font-semibold mb-6 text-gray-700">店舗情報</h2>
+    <Box sx={{ mb: 5 }}>
+      <Typography variant="h6" sx={{ fontWeight: 600, mb: 3 }} color="text.secondary">
+        店舗情報
+      </Typography>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
         {/* ヘッダー */}
-        <div className="p-6 border-b border-gray-200 bg-gray-50">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-            <div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-1">{store.name}</h3>
-              <p className="text-sm text-gray-600">
+        <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'grey.50' }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} sx={{ alignItems: { md: 'center' }, justifyContent: 'space-between', gap: 3 }}>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 'bold' }}>{store.name}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                 店舗コード（スタッフに伝えてください）：
-                <span className="ml-2 font-mono text-lg font-bold text-blue-600 tracking-widest">
+                <Box component="span" sx={{ ml: 1, fontFamily: 'monospace', fontSize: 18, fontWeight: 700, color: 'primary.main', letterSpacing: 4 }}>
                   {store.store_code || '未設定'}
-                </span>
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
+                </Box>
+              </Typography>
+            </Box>
+            <Box>
               {!isEditing ? (
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-                >
+                <Button variant="contained" startIcon={<EditIcon />} onClick={() => setIsEditing(true)}>
                   編集
-                </button>
+                </Button>
               ) : (
-                <div className="flex gap-3">
-                  <button
+                <Stack direction="row" sx={{ gap: 1.5 }}>
+                  <Button
+                    variant="contained"
+                    color="success"
                     onClick={() => setShowConfirm(true)}
                     disabled={loading || !hasChanges()}
-                    className={`px-5 py-2.5 rounded-lg font-medium text-white transition-colors ${
-                      loading || !hasChanges() ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
-                    }`}
+                    startIcon={loading ? <CircularProgress size={16} color="inherit" /> : undefined}
                   >
                     {loading ? '保存中...' : '保存'}
-                  </button>
-                  <button
-                    onClick={handleCancel}
-                    className="px-5 py-2.5 rounded-lg border border-gray-300 hover:bg-gray-100 transition-colors"
-                  >
-                    キャンセル
-                  </button>
-                </div>
+                  </Button>
+                  <Button variant="outlined" onClick={handleCancel}>キャンセル</Button>
+                </Stack>
               )}
-            </div>
-          </div>
-        </div>
+            </Box>
+          </Stack>
+        </Box>
 
         {/* 必要人数テーブル */}
-        <div className="p-6">
-          <p className="text-sm font-medium text-gray-700 mb-3">曜日ごとの必要人数（勤務区分別）</p>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="body2" sx={{ fontWeight: 500, mb: 1.5 }} color="text.secondary">
+            曜日ごとの必要人数（勤務区分別）
+          </Typography>
           {slots.length === 0 ? (
-            <div className="rounded-lg border border-gray-200 p-6 text-center text-sm text-gray-400">
-              下の「勤務区分の設定」で勤務区分を追加すると、ここで曜日ごとに必要人数を設定できます。
-            </div>
+            <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', borderRadius: 1.5 }}>
+              <Typography variant="body2" color="text.disabled">
+                下の「勤務区分の設定」で勤務区分を追加すると、ここで曜日ごとに必要人数を設定できます。
+              </Typography>
+            </Paper>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
-              <table className="min-w-full border-collapse">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5 border-b border-r border-gray-200 min-w-[90px]">
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1.5 }}>
+              <Table size="small">
+                <TableHead sx={{ bgcolor: 'grey.50' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600, fontSize: 11, color: 'text.secondary', minWidth: 90, borderRight: '1px solid', borderColor: 'divider' }}>
                       勤務区分
-                    </th>
-                    {DAYS_ORDER.map(({ eng, ja }) => {
-                      const isWeekend = eng === 'sun' || eng === 'sat';
-                      return (
-                        <th
-                          key={eng}
-                          className={`text-center text-xs font-medium px-2 py-2.5 border-b border-gray-200 min-w-[52px] ${
-                            eng === 'sun' ? 'text-red-500' : eng === 'sat' ? 'text-blue-500' : 'text-gray-500'
-                          } ${isWeekend ? 'bg-gray-100' : ''}`}
-                        >
-                          {ja}
-                        </th>
-                      );
-                    })}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
+                    </TableCell>
+                    {DAYS_ORDER.map(({ eng, ja }) => (
+                      <TableCell
+                        key={eng}
+                        align="center"
+                        sx={{
+                          fontWeight: 600, fontSize: 12, minWidth: 52,
+                          color: eng === 'sun' ? 'error.main' : eng === 'sat' ? 'primary.main' : 'text.secondary',
+                          bgcolor: (eng === 'sun' || eng === 'sat') ? 'grey.100' : 'transparent',
+                        }}
+                      >
+                        {ja}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {slots.map(slot => (
-                    <tr key={slot} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-2.5 text-sm font-medium text-gray-700 border-r border-gray-200 whitespace-nowrap">
+                    <TableRow key={slot} hover>
+                      <TableCell sx={{ fontWeight: 500, color: 'text.secondary', borderRight: '1px solid', borderColor: 'divider', whiteSpace: 'nowrap' }}>
                         {slot}
-                      </td>
+                      </TableCell>
                       {DAYS_ORDER.map(({ eng }) => {
                         const count = getCount(eng, slot);
                         const isChanged = count !== getOriginal(eng, slot);
                         const isWeekend = eng === 'sun' || eng === 'sat';
                         return (
-                          <td key={eng} className={`px-2 py-2 text-center ${isWeekend ? 'bg-gray-50' : ''}`}>
+                          <TableCell key={eng} align="center" sx={{ bgcolor: isWeekend ? 'grey.50' : 'transparent' }}>
                             {isEditing ? (
-                              <input
+                              <TextField
                                 type="number"
                                 value={count}
                                 onChange={(e) => handleInputChange(eng, slot, e.target.value)}
-                                className={`w-10 text-center text-sm font-bold border-b-2 bg-transparent focus:outline-none transition-colors mx-auto block ${
-                                  isChanged
-                                    ? 'border-blue-500 text-blue-600'
-                                    : 'border-gray-300 text-gray-800'
-                                }`}
-                                min="0"
-                                max="20"
+                                slotProps={{ htmlInput: { min: 0, max: 20, style: { textAlign: 'center', fontWeight: 700, padding: '2px 4px', width: 40 } } }}
+                                variant="standard"
+                                sx={{ '& .MuiInput-underline:before': { borderColor: isChanged ? 'primary.main' : 'divider' }, '& input': { color: isChanged ? 'primary.main' : 'text.primary' } }}
                               />
                             ) : (
-                              <span
+                              <Typography
+                                variant="body2"
+                                color={count > 0 ? 'text.primary' : 'text.disabled'}
+                                sx={{ fontWeight: 700, cursor: 'pointer' }}
                                 onClick={() => setIsEditing(true)}
-                                className={`cursor-pointer text-sm font-bold block text-center ${
-                                  count > 0 ? 'text-gray-800' : 'text-gray-300'
-                                }`}
                               >
                                 {count > 0 ? count : '-'}
-                              </span>
+                              </Typography>
                             )}
-                          </td>
+                          </TableCell>
                         );
                       })}
-                    </tr>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
-        </div>
-      </div>
+        </Box>
+      </Paper>
 
-      <ShiftSlotsSettings store={store} />
+      <ShiftSlotsSettings
+        store={store}
+        onUpdate={(slots) => {
+          onUpdateStores?.(stores.map(s =>
+            s.id === store.id ? { ...s, time_slots: slots } : s
+          ));
+        }}
+      />
 
       {/* 確認ダイアログ */}
-      {showConfirm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-lg max-w-md w-full overflow-hidden">
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900">変更を確認</h3>
-              <p className="mt-2 text-gray-600 text-sm">以下の設定を変更します。よろしいですか？</p>
-            </div>
-            <div className="p-6 max-h-80 overflow-y-auto">
-              {changedCells.length === 0 ? (
-                <p className="text-center text-gray-500 text-sm py-4">変更内容がありません</p>
-              ) : (
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="pb-2 font-medium text-gray-700">曜日・区分</th>
-                      <th className="pb-2 font-medium text-gray-700">変更前</th>
-                      <th className="pb-2 font-medium text-gray-700">変更後</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {changedCells.map(({ day, slot, orig, next }) => (
-                      <tr key={`${day}-${slot}`} className="border-b border-gray-100 last:border-b-0">
-                        <td className="py-2 text-gray-700">{getJapaneseWeekday(day)}・{slot}</td>
-                        <td className="py-2 text-gray-400">{orig}人</td>
-                        <td className="py-2 font-bold text-blue-600">{next}人</td>
-                      </tr>
+      <Dialog open={showConfirm} onClose={() => setShowConfirm(false)} maxWidth="sm" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
+        <DialogTitle sx={{ fontWeight: 700 }}>変更を確認</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            以下の設定を変更します。よろしいですか？
+          </Typography>
+          {changedCells.length === 0 ? (
+            <Typography variant="body2" color="text.disabled" sx={{ textAlign: 'center', py: 2 }}>
+              変更内容がありません
+            </Typography>
+          ) : (
+            <TableContainer sx={{ maxHeight: 320 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    {['曜日・区分', '変更前', '変更後'].map(h => (
+                      <TableCell key={h} sx={{ fontWeight: 600, color: 'text.secondary' }}>{h}</TableCell>
                     ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            <div className="flex justify-end gap-3 p-6 border-t border-gray-200">
-              <button
-                onClick={() => setShowConfirm(false)}
-                className="px-5 py-2.5 rounded-lg border border-gray-300 hover:bg-gray-100 transition-colors text-sm"
-              >
-                キャンセル
-              </button>
-              <button
-                onClick={handleConfirmSave}
-                disabled={loading}
-                className={`px-5 py-2.5 rounded-lg text-white text-sm transition-colors ${
-                  loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
-                }`}
-              >
-                {loading ? '保存中...' : '保存する'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </section>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {changedCells.map(({ day, slot, orig, next }) => (
+                    <TableRow key={`${day}-${slot}`}>
+                      <TableCell>{getJapaneseWeekday(day)}・{slot}</TableCell>
+                      <TableCell sx={{ color: 'text.disabled' }}>{orig}人</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: 'primary.main' }}>{next}人</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </DialogContent>
+        <Divider />
+        <DialogActions sx={{ p: 2.5, gap: 1 }}>
+          <Button variant="outlined" onClick={() => setShowConfirm(false)}>キャンセル</Button>
+          <Button
+            variant="contained"
+            color="success"
+            onClick={handleConfirmSave}
+            disabled={loading}
+            startIcon={loading ? <CircularProgress size={16} color="inherit" /> : undefined}
+          >
+            {loading ? '保存中...' : '保存する'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }

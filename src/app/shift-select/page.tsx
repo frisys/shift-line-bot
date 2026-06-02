@@ -92,11 +92,11 @@ function ShiftSelectContent() {
 
   // 店舗情報取得（API経由）
   useEffect(() => {
-    if (!storeId) return;
+    if (!userId || !storeId) return;
 
     async function fetchStore() {
       try {
-        const res = await fetch(`/api/stores/${storeId}`);
+        const res = await fetch(`/api/stores/${storeId}?userId=${encodeURIComponent(userId)}`);
         const json = await res.json();
         if (json.data) setStoreName(json.data.name);
       } catch (err) {
@@ -105,7 +105,7 @@ function ShiftSelectContent() {
     }
 
     fetchStore();
-  }, [storeId]);
+  }, [storeId, userId]);
 
   // 既存の希望を取得（API経由）
   useEffect(() => {

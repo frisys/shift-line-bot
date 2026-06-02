@@ -10,4 +10,5 @@ export interface Staff {
   max_weekly_days: number | null;
   unavailable_days?: string[];
   preferred_time_slots?: string[];
+  hourly_wage?: number | null;
 }

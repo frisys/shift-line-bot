@@ -1,10 +1,9 @@
-// components/StaffEditModal.tsx
 'use client';
 
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { Staff } from '@/types';
-import { updateStaffProfile, updateStaffStoreSettings } from '@/services';
+import { createStaff } from '@/services';
 import { DAYS_ORDER } from '@/constants';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -22,103 +21,86 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 
-interface StaffEditModalProps {
-  staff: Staff;
+interface StaffAddModalProps {
+  storeId: string;
   timeSlots?: string[];
   onClose: () => void;
-  onSaved: (updated: Staff) => void;
+  onAdded: (newStaff: Staff) => void;
 }
 
-export default function StaffEditModal({ staff, timeSlots = [], onClose, onSaved }: StaffEditModalProps) {
-  const [formData, setFormData] = useState<Staff>({ ...staff });
+export default function StaffAddModal({ storeId, timeSlots = [], onClose, onAdded }: StaffAddModalProps) {
+  const [name, setName] = useState('');
+  const [role, setRole] = useState<Staff['role']>('staff');
+  const [maxConsecutive, setMaxConsecutive] = useState('');
+  const [maxWeekly, setMaxWeekly] = useState('');
+  const [hourlyWage, setHourlyWage] = useState('');
+  const [unavailableDays, setUnavailableDays] = useState<string[]>([]);
+  const [preferredSlots, setPreferredSlots] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: (name.includes('max_') || name === 'hourly_wage') ? parseInt(value) || null : value,
-    }));
-  };
-
   const handleDayToggle = (eng: string) => {
-    setFormData(prev => {
-      const current = prev.unavailable_days ?? [];
-      const next = current.includes(eng)
-        ? current.filter(d => d !== eng)
-        : [...current, eng];
-      return { ...prev, unavailable_days: next };
-    });
+    setUnavailableDays(prev =>
+      prev.includes(eng) ? prev.filter(d => d !== eng) : [...prev, eng]
+    );
   };
 
   const handleSlotToggle = (slot: string) => {
-    setFormData(prev => {
-      const current = prev.preferred_time_slots ?? [];
-      const next = current.includes(slot)
-        ? current.filter(s => s !== slot)
-        : [...current, slot];
-      return { ...prev, preferred_time_slots: next };
-    });
+    setPreferredSlots(prev =>
+      prev.includes(slot) ? prev.filter(s => s !== slot) : [...prev, slot]
+    );
   };
 
   const handleSave = async () => {
+    if (!name.trim()) {
+      toast.error('名前を入力してください');
+      return;
+    }
     setSaving(true);
     try {
-      const { error: profileError } = await updateStaffProfile(formData.id, {
-        name: formData.name || '',
+      const { staff, error } = await createStaff(storeId, {
+        name: name.trim(),
+        role,
+        max_consecutive_days: maxConsecutive ? parseInt(maxConsecutive) : null,
+        max_weekly_days: maxWeekly ? parseInt(maxWeekly) : null,
+        unavailable_days: unavailableDays,
+        preferred_time_slots: preferredSlots,
+        hourly_wage: hourlyWage ? parseInt(hourlyWage) : null,
       });
-      if (profileError) throw profileError;
-
-      const { error: storesError } = await updateStaffStoreSettings(
-        formData.line_user_id,
-        formData.store_id,
-        {
-          role: formData.role,
-          max_consecutive_days: formData.max_consecutive_days,
-          max_weekly_days: formData.max_weekly_days,
-          unavailable_days: formData.unavailable_days,
-          preferred_time_slots: formData.preferred_time_slots,
-          hourly_wage: formData.hourly_wage,
-        }
-      );
-      if (storesError) throw storesError;
-
-      toast.success('スタッフ情報を更新しました！');
-      onSaved(formData);
+      if (error || !staff) throw error ?? new Error('作成に失敗しました');
+      toast.success('スタッフを追加しました');
+      onAdded(staff);
       onClose();
     } catch (err: unknown) {
-      toast.error('更新に失敗しました: ' + (err instanceof Error ? err.message : '不明なエラー'));
+      toast.error('追加に失敗しました: ' + (err instanceof Error ? err.message : '不明なエラー'));
     } finally {
       setSaving(false);
     }
   };
 
-  const unavailableDays = formData.unavailable_days ?? [];
-
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
       <DialogTitle sx={{ bgcolor: 'grey.50', borderBottom: '1px solid', borderColor: 'divider', fontWeight: 600 }}>
-        スタッフ編集: {staff.name || '未設定'}
+        スタッフを追加
       </DialogTitle>
 
       <DialogContent sx={{ p: 3, pt: 3 }}>
         <Stack spacing={3} sx={{ mt: 1 }}>
           <TextField
             label="名前"
-            name="name"
-            value={formData.name || ''}
-            onChange={handleChange}
+            value={name}
+            onChange={e => setName(e.target.value)}
             fullWidth
             size="small"
+            required
+            autoFocus
           />
 
           <FormControl fullWidth size="small">
             <InputLabel>役割</InputLabel>
             <Select
               label="役割"
-              name="role"
-              value={formData.role}
-              onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as Staff['role'] }))}
+              value={role}
+              onChange={e => setRole(e.target.value as Staff['role'])}
             >
               <MenuItem value="staff">スタッフ</MenuItem>
               <MenuItem value="manager">店長</MenuItem>
@@ -130,27 +112,24 @@ export default function StaffEditModal({ staff, timeSlots = [], onClose, onSaved
             <TextField
               label="最大連勤日数"
               type="number"
-              name="max_consecutive_days"
-              value={formData.max_consecutive_days ?? ''}
-              onChange={handleChange}
+              value={maxConsecutive}
+              onChange={e => setMaxConsecutive(e.target.value)}
               slotProps={{ htmlInput: { min: 1, max: 7 } }}
               size="small"
             />
             <TextField
               label="週最大日数"
               type="number"
-              name="max_weekly_days"
-              value={formData.max_weekly_days ?? ''}
-              onChange={handleChange}
+              value={maxWeekly}
+              onChange={e => setMaxWeekly(e.target.value)}
               slotProps={{ htmlInput: { min: 1, max: 7 } }}
               size="small"
             />
             <TextField
               label="時給 (円)"
               type="number"
-              name="hourly_wage"
-              value={formData.hourly_wage ?? ''}
-              onChange={handleChange}
+              value={hourlyWage}
+              onChange={e => setHourlyWage(e.target.value)}
               slotProps={{ htmlInput: { min: 0 } }}
               size="small"
             />
@@ -177,9 +156,6 @@ export default function StaffEditModal({ staff, timeSlots = [], onClose, onSaved
                 );
               })}
             </Stack>
-            <Typography variant="caption" color="text.disabled" sx={{ mt: 1, display: 'block' }}>
-              タップして選択。苦手曜日はシフト最適化で考慮されます。
-            </Typography>
           </Box>
 
           {timeSlots.length > 0 && (
@@ -189,7 +165,7 @@ export default function StaffEditModal({ staff, timeSlots = [], onClose, onSaved
               </Typography>
               <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap' }}>
                 {timeSlots.map(slot => {
-                  const selected = (formData.preferred_time_slots ?? []).includes(slot);
+                  const selected = preferredSlots.includes(slot);
                   return (
                     <Button
                       key={slot}
@@ -204,9 +180,6 @@ export default function StaffEditModal({ staff, timeSlots = [], onClose, onSaved
                   );
                 })}
               </Stack>
-              <Typography variant="caption" color="text.disabled" sx={{ mt: 1, display: 'block' }}>
-                タップして選択。苦手時間帯はシフト最適化で考慮されます。
-              </Typography>
             </Box>
           )}
         </Stack>
@@ -221,7 +194,7 @@ export default function StaffEditModal({ staff, timeSlots = [], onClose, onSaved
           disabled={saving}
           startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}
         >
-          {saving ? '保存中...' : '保存'}
+          {saving ? '追加中...' : '追加'}
         </Button>
       </DialogActions>
     </Dialog>

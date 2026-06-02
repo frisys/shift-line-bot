@@ -2,8 +2,37 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { ShiftPreference, Store } from '@/types';
+import { ShiftPreference, Store, Staff } from '@/types';
 import { supabase } from '@/lib/supabase/client';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Button from '@mui/material/Button';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
+import Tooltip from '@mui/material/Tooltip';
+import Popover from '@mui/material/Popover';
+import MenuList from '@mui/material/MenuList';
+import MenuItem from '@mui/material/MenuItem';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import TableFooter from '@mui/material/TableFooter';
+import Stack from '@mui/material/Stack';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import TodayIcon from '@mui/icons-material/Today';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import SaveIcon from '@mui/icons-material/Save';
+import UndoIcon from '@mui/icons-material/Undo';
+import PrintIcon from '@mui/icons-material/Print';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 interface OptimizeAssignment {
   employee_id: string;
@@ -25,11 +54,12 @@ interface OptimizeResult {
 interface ShiftPreferencesTableProps {
   preferences: ShiftPreference[];
   store: Store | null;
+  staff?: Staff[];
 }
 
 const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
-export default function ShiftPreferencesTable({ preferences, store }: ShiftPreferencesTableProps) {
+export default function ShiftPreferencesTable({ preferences, store, staff = [] }: ShiftPreferencesTableProps) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth()); // 0-indexed
@@ -40,9 +70,8 @@ export default function ShiftPreferencesTable({ preferences, store }: ShiftPrefe
   const [editedAssignments, setEditedAssignments] = useState<OptimizeAssignment[] | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [activeCell, setActiveCell] = useState<{
-    staffName: string; date: string; top: number; left: number;
-  } | null>(null);
+  const [anchorEl, setAnchorEl] = useState<HTMLTableCellElement | null>(null);
+  const [popoverInfo, setPopoverInfo] = useState<{ staffName: string; date: string } | null>(null);
 
   // 当月の日付配列を生成
   const monthDays = useMemo(() => {
@@ -78,6 +107,16 @@ export default function ShiftPreferencesTable({ preferences, store }: ShiftPrefe
     });
     return map;
   }, [preferences]);
+
+  // スタッフ名 → 時給マップ
+  const staffNameToWage = useMemo(() => {
+    const map: Record<string, number | null> = {};
+    staff.forEach(s => {
+      const name = userNameMap[s.line_user_id];
+      if (name) map[name] = s.hourly_wage ?? null;
+    });
+    return map;
+  }, [staff, userNameMap]);
 
   const staffNames = Object.keys(groupedByStaff);
 
@@ -116,7 +155,8 @@ export default function ShiftPreferencesTable({ preferences, store }: ShiftPrefe
   useEffect(() => {
     setEditedAssignments(optimizeResult?.assignments ?? null);
     setHasUnsavedChanges(false);
-    setActiveCell(null);
+    setAnchorEl(null);
+    setPopoverInfo(null);
   }, [optimizeResult]);
 
   const saveConfirmation = async (result: OptimizeResult) => {
@@ -158,29 +198,7 @@ export default function ShiftPreferencesTable({ preferences, store }: ShiftPrefe
     return ['日', '月', '火', '水', '木', '金', '土'][day];
   };
 
-  const getDayStyle = (date: string) => {
-    const day = new Date(date + 'T00:00:00+09:00').getDay();
-    if (day === 0) return 'text-red-500';
-    if (day === 6) return 'text-blue-500';
-    return 'text-gray-500';
-  };
-
   const todayDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
-  const getDateHeaderBg = (date: string) => {
-    const day = new Date(date + 'T00:00:00+09:00').getDay();
-    if (day === 0) return 'bg-red-50';
-    if (day === 6) return 'bg-blue-50';
-    return 'bg-gray-50';
-  };
-
-  const getDateCellClass = (date: string, isActive: boolean) => {
-    if (isActive) return 'bg-blue-100';
-    const day = new Date(date + 'T00:00:00+09:00').getDay();
-    if (day === 0) return 'bg-red-50 hover:bg-red-100';
-    if (day === 6) return 'bg-blue-50 hover:bg-blue-100';
-    return 'hover:bg-gray-100';
-  };
 
   const handleOptimize = async () => {
     setOptimizing(true);
@@ -312,11 +330,13 @@ export default function ShiftPreferencesTable({ preferences, store }: ShiftPrefe
   };
 
   const handleCellClick = (staffName: string, date: string, e: React.MouseEvent<HTMLTableCellElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    // 画面右端にはみ出さないよう左位置を調整
-    const popupWidth = 96;
-    const left = Math.min(rect.left, window.innerWidth - popupWidth - 8);
-    setActiveCell({ staffName, date, top: rect.bottom + 4, left });
+    setAnchorEl(e.currentTarget);
+    setPopoverInfo({ staffName, date });
+  };
+
+  const handlePopoverClose = () => {
+    setAnchorEl(null);
+    setPopoverInfo(null);
   };
 
   const handleSaveEdits = async () => {
@@ -477,7 +497,7 @@ export default function ShiftPreferencesTable({ preferences, store }: ShiftPrefe
   <meta charset="UTF-8">
   <title>${title}</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; overflow: visible; }
     body { font-family: 'Helvetica Neue', Arial, 'Hiragino Sans', sans-serif; padding: 24px; color: #111827; }
     h1 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
     table { border-collapse: collapse; width: 100%; }
@@ -489,12 +509,12 @@ export default function ShiftPreferencesTable({ preferences, store }: ShiftPrefe
 </head>
 <body>
   <h1>${title}</h1>
-  <div style="overflow-x:auto;">
+  <div style="overflow:visible;">
     <table>${headerRow}${bodyRows}</table>
   </div>
   <div style="margin-top:20px;">
     <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:6px;padding-bottom:4px;border-bottom:2px solid #e5e7eb;">勤務区分別人数</div>
-    <div style="overflow-x:auto;">
+    <div style="overflow:visible;">
       <table>${headerRow}${summaryRows}${totalRow}</table>
     </div>
   </div>
@@ -511,491 +531,542 @@ export default function ShiftPreferencesTable({ preferences, store }: ShiftPrefe
 
   return (
     <>
-    {/* コントロール */}
-    <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
-      <div className="flex items-center gap-3 flex-wrap">
-        <button
-          onClick={handlePrevMonth}
-          className="p-2 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors text-sm"
+      {/* コントロール */}
+      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, mb: 2 }}>
+        <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Button variant="outlined" size="small" startIcon={<ChevronLeftIcon />} onClick={handlePrevMonth}>
+            前月
+          </Button>
+          <Typography variant="body2" sx={{ fontWeight: 500, minWidth: 80, textAlign: 'center' }}>
+            {year}年{month + 1}月
+          </Typography>
+          <Button variant="outlined" size="small" endIcon={<ChevronRightIcon />} onClick={handleNextMonth}>
+            次月
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<TodayIcon />}
+            onClick={() => { setYear(today.getFullYear()); setMonth(today.getMonth()); }}
+            disabled={isCurrentMonth}
+          >
+            今月に戻る
+          </Button>
+        </Stack>
+        <Button
+          variant="contained"
+          color="success"
+          startIcon={optimizing ? <CircularProgress size={16} color="inherit" /> : <AutoFixHighIcon />}
+          onClick={handleOptimize}
+          disabled={optimizing}
         >
-          ← 前月
-        </button>
-        <span className="text-sm font-medium text-gray-700 min-w-[80px] text-center">
-          {year}年{month + 1}月
-        </span>
-        <button
-          onClick={handleNextMonth}
-          className="p-2 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors text-sm"
-        >
-          次月 →
-        </button>
-        <button
-          onClick={() => { setYear(today.getFullYear()); setMonth(today.getMonth()); }}
-          disabled={isCurrentMonth}
-          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-            isCurrentMonth
-              ? 'bg-gray-400 cursor-not-allowed text-gray-600'
-              : 'bg-blue-600 hover:bg-blue-700 text-white'
-          }`}
-        >
-          今月に戻る
-        </button>
-      </div>
-      <button
-        onClick={handleOptimize}
-        disabled={optimizing}
-        className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-          optimizing
-            ? 'bg-gray-400 cursor-not-allowed text-gray-600'
-            : 'bg-green-600 hover:bg-green-700 text-white'
-        }`}
-      >
-        {optimizing ? '最適化中...' : 'シフトを作成'}
-      </button>
-    </div>
+          {optimizing ? '最適化中...' : 'シフトを作成'}
+        </Button>
+      </Stack>
 
-    {/* 最適化エラー */}
-    {optimizeError && (
-      <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
-        {optimizeError}
-      </div>
-    )}
-
-    {/* 内部タブ */}
-    <div className="flex border-b border-gray-200 mb-4">
-      <button
-        onClick={() => setInnerTab('preferences')}
-        className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
-          innerTab === 'preferences'
-            ? 'border-blue-600 text-blue-600'
-            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-        }`}
-      >
-        シフト希望
-      </button>
-      <button
-        onClick={() => setInnerTab('result')}
-        className={`flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
-          innerTab === 'result'
-            ? 'border-blue-600 text-blue-600'
-            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-        }`}
-      >
-        シフト作成結果
-        {optimizeResult && (
-          <span className="inline-flex items-center justify-center w-2 h-2 rounded-full bg-green-500" />
-        )}
-      </button>
-    </div>
-
-    {/* シフト希望タブ */}
-    {innerTab === 'preferences' && (
-    <section className="mb-10">
-      {staffNames.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500">
-          この月の希望がありません
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-20 min-w-[120px]">
-                  スタッフ
-                </th>
-                {monthDays.map(date => (
-                  <th
-                    key={date}
-                    className={`px-1 py-2 text-center text-xs font-medium min-w-[36px] ${getDayStyle(date)}`}
-                  >
-                    <div className="font-bold">{getDayNum(date)}</div>
-                    <div className="text-[10px]">{getWeekdayLabel(date)}</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {staffNames.map(name => (
-                <tr key={name} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white z-10">
-                    {name}
-                  </td>
-                  {monthDays.map(date => {
-                    const pref = groupedByStaff[name]?.[date];
-
-                    if (!pref) {
-                      return (
-                        <td key={date} className="px-1 py-2 text-center text-gray-300 text-xs">
-                          -
-                        </td>
-                      );
-                    }
-
-                    let badgeClass = '';
-                    let symbol = '';
-                    switch (pref.status) {
-                      case 'ok':
-                        badgeClass = 'bg-green-100 text-green-800';
-                        symbol = '◯';
-                        break;
-                      case 'maybe':
-                        badgeClass = 'bg-yellow-100 text-yellow-800';
-                        symbol = '△';
-                        break;
-                      case 'no':
-                        badgeClass = 'bg-red-100 text-red-800';
-                        symbol = '×';
-                        break;
-                    }
-
-                    return (
-                      <td key={date} className="px-1 py-2 text-center">
-                        <div className="flex flex-col items-center gap-0.5 relative group">
-                          <span className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-bold ${badgeClass}`}>
-                            {symbol}
-                          </span>
-                          {pref.time_slot && (
-                            <span className="text-[10px] text-gray-500 leading-none">
-                              {pref.time_slot}
-                            </span>
-                          )}
-                          {pref.note && (
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-20">
-                              <div className="bg-gray-900 text-white text-xs rounded py-1 px-2 whitespace-nowrap max-w-xs">
-                                {pref.note}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* 最適化エラー */}
+      {optimizeError && (
+        <Alert severity="error" sx={{ mb: 2 }}>{optimizeError}</Alert>
       )}
-    </section>
-    )}
 
-    {/* シフト作成結果タブ */}
-    {innerTab === 'result' && (
-      <section className="mb-10">
-        {!optimizeResult ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500">
-            「シフトを作成」ボタンを押して結果を生成してください
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {optimizeResult.score !== null && optimizeResult.detail && (
-                  <>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
-                      総合 {optimizeResult.score}
-                    </span>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-semibold">
-                      カバ {optimizeResult.detail.coverage}
-                    </span>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-xs font-semibold">
-                      公平 {optimizeResult.detail.fairness}
-                    </span>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs font-semibold">
-                      連勤 {optimizeResult.detail.consecutive}
-                    </span>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 text-xs font-semibold">
-                      希望 {optimizeResult.detail.preference}
-                    </span>
-                  </>
-                )}
-              </div>
-              {assignmentGrid && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => { setEditedAssignments(optimizeResult?.assignments ?? null); setHasUnsavedChanges(false); }}
-                    disabled={!hasUnsavedChanges}
-                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                      hasUnsavedChanges
-                        ? 'border-gray-300 text-gray-700 hover:bg-gray-100'
-                        : 'border-gray-200 text-gray-300 cursor-not-allowed'
-                    }`}
-                  >
-                    元に戻す
-                  </button>
-                  <button
-                    onClick={handleSaveEdits}
-                    disabled={!hasUnsavedChanges || saving}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg text-white transition-colors ${
-                      hasUnsavedChanges && !saving
-                        ? 'bg-green-600 hover:bg-green-700'
-                        : 'bg-gray-300 cursor-not-allowed'
-                    }`}
-                  >
-                    {saving ? '保存中...' : '保存'}
-                  </button>
-                  <button
-                    onClick={handleExportPDF}
-                    className="px-3 py-1.5 text-sm font-medium rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
-                  >
-                    PDF出力
-                  </button>
-                </div>
+      {/* 内部タブ */}
+      <Tabs
+        value={innerTab}
+        onChange={(_, v) => setInnerTab(v as 'preferences' | 'result')}
+        sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
+      >
+        <Tab value="preferences" label="シフト希望" />
+        <Tab
+          value="result"
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              シフト作成結果
+              {optimizeResult && (
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
               )}
-            </div>
-            {optimizeResult.assignments === null ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500 text-sm">
-                解が見つかりませんでした
-              </div>
-            ) : assignmentGrid ? (
-              <>
-              <div className="overflow-auto rounded-xl border border-gray-200 shadow-sm max-h-[calc(100vh-320px)] min-h-[300px]">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 top-0 bg-gray-50 z-30 min-w-[120px] border-r border-b border-gray-300">
-                        スタッフ
-                      </th>
-                      {monthDays.map(date => (
-                        <th
-                          key={date}
-                          className={`px-1 py-2 text-center text-xs font-medium min-w-[36px] sticky top-0 z-20 border-b border-gray-200 ${getDayStyle(date)} ${getDateHeaderBg(date)}`}
-                        >
-                          <div className={`font-bold ${date === todayDateStr ? 'inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-[11px]' : ''}`}>
-                            {getDayNum(date)}
-                          </div>
-                          <div className="text-[10px]">{getWeekdayLabel(date)}</div>
-                        </th>
-                      ))}
-                      <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-20 border-l-2 border-b border-gray-400 min-w-[64px]">
-                        出勤日数
-                      </th>
-                      {allShiftTypes.map(st => (
-                        <th key={st} className="px-3 py-3 text-center text-xs font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-20 border-l border-b border-gray-200 min-w-[52px]">
-                          {st}
-                        </th>
-                      ))}
-                      <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-20 border-l border-b border-gray-200 min-w-[72px]">
-                        希望充足率
-                      </th>
-                      <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-20 border-l border-b border-gray-200 min-w-[64px]">
-                        最大連勤
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {Object.entries(assignmentGrid).map(([name, dateMap]) => {
-                      const summary = staffMonthlySummary.find(s => s.name === name);
-                      const rateColor = summary?.satisfactionRate === null || summary?.satisfactionRate === undefined
-                        ? 'text-gray-400'
-                        : summary.satisfactionRate >= 80 ? 'text-green-600'
-                        : summary.satisfactionRate >= 60 ? 'text-yellow-600'
-                        : 'text-red-600';
-                      const consecClass = (summary?.maxConsecutive ?? 0) >= 7 ? 'text-red-600 font-bold'
-                        : (summary?.maxConsecutive ?? 0) >= 5 ? 'text-orange-500 font-semibold'
-                        : 'text-gray-600';
-                      return (
-                        <tr key={name} className="group hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-1 whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white group-hover:bg-gray-50 z-10 border-r border-gray-300">
-                            {name}
-                          </td>
-                          {monthDays.map(date => {
-                            const shiftType = dateMap[date];
-                            const isActive = activeCell?.staffName === name && activeCell?.date === date;
-                            return (
-                              <td
-                                key={date}
-                                onClick={e => handleCellClick(name, date, e)}
-                                className={`px-1 py-1 text-center cursor-pointer transition-colors ${getDateCellClass(date, isActive)}`}
-                              >
-                                {shiftType ? (
-                                  <span className="inline-block px-1.5 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800 leading-tight whitespace-nowrap">
-                                    {shiftType}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 text-xs select-none opacity-0 group-hover:opacity-100 transition-opacity">+</span>
-                                )}
-                              </td>
-                            );
-                          })}
-                          <td className="px-3 py-1 text-center text-sm font-bold text-gray-800 border-l-2 border-gray-400">
-                            {summary?.total ?? 0}日
-                          </td>
-                          {allShiftTypes.map(st => (
-                            <td key={st} className="px-3 py-1 text-center text-sm text-gray-600 border-l border-gray-200">
-                              {summary?.byType[st] ?? 0}
-                            </td>
-                          ))}
-                          <td className={`px-3 py-1 text-center text-sm font-semibold border-l border-gray-200 ${rateColor}`}>
-                            {summary?.satisfactionRate !== null && summary?.satisfactionRate !== undefined ? `${summary.satisfactionRate}%` : '-'}
-                          </td>
-                          <td className={`px-3 py-1 text-center text-sm border-l border-gray-200 ${consecClass}`}>
-                            {(summary?.maxConsecutive ?? 0) > 0 ? `${summary?.maxConsecutive}日` : '-'}
-                            {(summary?.maxConsecutive ?? 0) >= 5 && <span className="ml-1 text-[10px]">⚠️</span>}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot className="border-t-2 border-gray-300">
-                    <tr className="bg-orange-50">
-                      <td className="px-4 py-1.5 text-xs font-semibold text-orange-600 whitespace-nowrap sticky left-0 bg-orange-50 z-10 border-r border-gray-200">
-                        不足日
-                      </td>
-                      {monthDays.map(date => {
-                        const isShortage = Object.entries(requiredCountMap[date] ?? {}).some(([st, req]) =>
-                          req !== null && req > 0 && (summaryCounts?.[date]?.[st] ?? 0) < req
-                        );
-                        return (
-                          <td key={date} className="px-1 py-1.5 text-center">
-                            {isShortage ? (
-                              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none">!</span>
-                            ) : (
-                              <span className="text-gray-200 text-[10px]">-</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                      <td colSpan={allShiftTypes.length + 3} className="border-l-2 border-gray-400" />
-                    </tr>
-                    <tr className="bg-gray-50 border-t-2 border-gray-300">
-                      <td colSpan={monthDays.length + 1} className="px-4 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider sticky left-0 bg-gray-50">
-                        勤務区分別人数
-                      </td>
-                      <td colSpan={allShiftTypes.length + 3} className="border-l-2 border-gray-400" />
-                    </tr>
-                    {allShiftTypes.map((st, i) => {
-                      const rowBg = i % 2 === 0 ? 'bg-blue-50' : 'bg-indigo-50';
-                      const stickyBg = i % 2 === 0 ? 'bg-blue-50' : 'bg-indigo-50';
-                      const textColor = i % 2 === 0 ? 'text-blue-700' : 'text-indigo-700';
-                      const defaultDot = i % 2 === 0 ? 'bg-blue-500' : 'bg-indigo-500';
-                      return (
-                        <tr key={st} className={rowBg}>
-                          <td className={`px-4 py-1.5 text-xs font-semibold whitespace-nowrap sticky left-0 z-10 border-r border-gray-200 ${stickyBg} ${textColor}`}>
-                            {st}
-                          </td>
-                          {monthDays.map(date => {
-                            const count = summaryCounts?.[date]?.[st] ?? 0;
-                            const required = requiredCountMap[date]?.[st] ?? null;
-                            const hasReq = required !== null && required > 0;
-                            const status = hasReq
-                              ? count < required! ? 'shortage' : count === required! ? 'exact' : 'surplus'
-                              : null;
-                            const dotColor = status === 'shortage' ? 'bg-red-500'
-                              : status === 'exact' ? 'bg-blue-500'
-                              : status === 'surplus' ? 'bg-green-500'
-                              : defaultDot;
-                            const reqColor = status === 'shortage' ? 'text-red-500'
-                              : status === 'exact' ? 'text-blue-500'
-                              : 'text-green-600';
-                            return (
-                              <td key={date} className="px-1 py-1.5 text-center">
-                                {count > 0 ? (
-                                  <div className="flex flex-col items-center gap-0">
-                                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white ${dotColor}`}>
-                                      {count}
-                                    </span>
-                                    {hasReq && (
-                                      <span className={`text-[9px] leading-none mt-0.5 font-medium ${reqColor}`}>
-                                        /{required}
-                                      </span>
-                                    )}
-                                  </div>
-                                ) : hasReq ? (
-                                  <div className="flex flex-col items-center gap-0">
-                                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white bg-red-500">
-                                      0
-                                    </span>
-                                    <span className="text-[9px] leading-none mt-0.5 font-medium text-red-500">
-                                      /{required}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <span className="text-gray-300 text-[10px]">-</span>
-                                )}
-                              </td>
-                            );
-                          })}
-                          <td colSpan={allShiftTypes.length + 3} className="border-l-2 border-gray-400" />
-                        </tr>
-                      );
-                    })}
-                    <tr className="bg-gray-100 border-t border-gray-200">
-                      <td className="px-4 py-1.5 text-xs font-bold text-gray-700 sticky left-0 bg-gray-100 z-10 border-r border-gray-200">
-                        合計
-                      </td>
-                      {monthDays.map(date => {
-                        const total = Object.values(summaryCounts?.[date] ?? {}).reduce((a, b) => a + b, 0);
-                        const totalReq = Object.values(requiredCountMap[date] ?? {})
-                          .filter((v): v is number => v !== null)
-                          .reduce((a, b) => a + b, 0);
-                        const hasReq = totalReq > 0;
-                        const totalStatus = hasReq
-                          ? total < totalReq ? 'shortage' : total === totalReq ? 'exact' : 'surplus'
-                          : null;
-                        const totalColor = totalStatus === 'shortage' ? 'text-red-600'
-                          : totalStatus === 'exact' ? 'text-blue-600'
-                          : totalStatus === 'surplus' ? 'text-green-700'
-                          : 'text-gray-800';
-                        const totalReqColor = totalStatus === 'shortage' ? 'text-red-500'
-                          : totalStatus === 'exact' ? 'text-blue-500'
-                          : 'text-green-600';
-                        return (
-                          <td key={date} className="px-1 py-1.5 text-center">
-                            {total > 0 ? (
-                              <div className="flex flex-col items-center gap-0">
-                                <span className={`text-xs font-bold ${totalColor}`}>{total}</span>
-                                {hasReq && (
-                                  <span className={`text-[9px] leading-none font-medium ${totalReqColor}`}>/{totalReq}</span>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-gray-300 text-[10px]">-</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                      <td colSpan={allShiftTypes.length + 3} className="border-l-2 border-gray-400" />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              </>
-            ) : null}
-          </>
-        )}
-      </section>
-    )}
-    {/* セル編集ポップオーバー */}
-    {activeCell && (
-      <>
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setActiveCell(null)}
+            </Box>
+          }
         />
-        <div
-          className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl py-1 overflow-hidden"
-          style={{ top: activeCell.top, left: activeCell.left, minWidth: 88 }}
-        >
-          <button
-            onClick={() => { handleCellEdit(activeCell.staffName, activeCell.date, ''); setActiveCell(null); }}
-            className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-50 transition-colors"
+      </Tabs>
+
+      {/* シフト希望タブ */}
+      {innerTab === 'preferences' && (
+        <Box sx={{ mb: 5 }}>
+          {staffNames.length === 0 ? (
+            <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
+              <Typography color="text.secondary">この月の希望がありません</Typography>
+            </Paper>
+          ) : (
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'grey.50' }}>
+                    <TableCell
+                      sx={{
+                        position: 'sticky', left: 0, bgcolor: 'grey.50', zIndex: 2,
+                        minWidth: 120, fontWeight: 600, fontSize: 11,
+                        textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em',
+                      }}
+                    >
+                      スタッフ
+                    </TableCell>
+                    {monthDays.map(date => {
+                      const day = new Date(date + 'T00:00:00+09:00').getDay();
+                      return (
+                        <TableCell
+                          key={date}
+                          align="center"
+                          sx={{
+                            minWidth: 36, px: 0.5, py: 1, fontSize: 11, fontWeight: 500,
+                            color: day === 0 ? 'error.main' : day === 6 ? 'primary.main' : 'text.secondary',
+                          }}
+                        >
+                          <Box sx={{ fontWeight: 700 }}>{getDayNum(date)}</Box>
+                          <Box sx={{ fontSize: 10 }}>{getWeekdayLabel(date)}</Box>
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {staffNames.map(name => (
+                    <TableRow key={name} hover>
+                      <TableCell
+                        sx={{
+                          position: 'sticky', left: 0, bgcolor: 'background.paper', zIndex: 1,
+                          fontWeight: 500, whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {name}
+                      </TableCell>
+                      {monthDays.map(date => {
+                        const pref = groupedByStaff[name]?.[date];
+                        if (!pref) {
+                          return (
+                            <TableCell key={date} align="center" sx={{ px: 0.5 }}>
+                              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
+                                <Box sx={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.disabled', fontSize: 11 }}>
+                                  -
+                                </Box>
+                                <Typography variant="caption" sx={{ fontSize: 9, lineHeight: 1, visibility: 'hidden' }}>　</Typography>
+                              </Box>
+                            </TableCell>
+                          );
+                        }
+                        let chipColor: 'success' | 'warning' | 'error' = 'success';
+                        let symbol = '◯';
+                        if (pref.status === 'maybe') { chipColor = 'warning'; symbol = '△'; }
+                        if (pref.status === 'no') { chipColor = 'error'; symbol = '×'; }
+                        return (
+                          <TableCell key={date} align="center" sx={{ px: 0.5 }}>
+                            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
+                              {pref.note ? (
+                                <Tooltip title={pref.note} placement="top">
+                                  <Chip
+                                    label={symbol}
+                                    size="small"
+                                    color={chipColor}
+                                    variant="outlined"
+                                    sx={{ width: 28, height: 28, fontSize: 12, fontWeight: 700, cursor: 'default' }}
+                                  />
+                                </Tooltip>
+                              ) : (
+                                <Chip
+                                  label={symbol}
+                                  size="small"
+                                  color={chipColor}
+                                  variant="outlined"
+                                  sx={{ width: 28, height: 28, fontSize: 12, fontWeight: 700 }}
+                                />
+                              )}
+                              <Typography variant="caption" sx={{ fontSize: 9, lineHeight: 1, color: 'text.secondary', visibility: pref.time_slot ? 'visible' : 'hidden' }}>
+                                {pref.time_slot || '　'}
+                              </Typography>
+                            </Box>
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Box>
+      )}
+
+      {/* シフト作成結果タブ */}
+      {innerTab === 'result' && (
+        <Box sx={{ mb: 5 }}>
+          {!optimizeResult ? (
+            <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
+              <Typography color="text.secondary">「シフトを作成」ボタンを押して結果を生成してください</Typography>
+            </Paper>
+          ) : (
+            <>
+              <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
+                <Stack direction="row" sx={{ alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                  {optimizeResult.score !== null && optimizeResult.detail && (
+                    <>
+                      <Chip label={`総合 ${optimizeResult.score}`} size="small" color="primary" />
+                      <Chip label={`カバ ${optimizeResult.detail.coverage}`} size="small" color="success" variant="outlined" />
+                      <Chip label={`公平 ${optimizeResult.detail.fairness}`} size="small" color="secondary" variant="outlined" />
+                      <Chip label={`連勤 ${optimizeResult.detail.consecutive}`} size="small" sx={{ bgcolor: '#fff7ed', color: '#c2410c', border: '1px solid #fdba74' }} />
+                      <Chip label={`希望 ${optimizeResult.detail.preference}`} size="small" sx={{ bgcolor: '#fefce8', color: '#854d0e', border: '1px solid #fde047' }} />
+                    </>
+                  )}
+                </Stack>
+                {assignmentGrid && (
+                  <Stack direction="row" sx={{ gap: 1 }}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<UndoIcon />}
+                      onClick={() => { setEditedAssignments(optimizeResult?.assignments ?? null); setHasUnsavedChanges(false); }}
+                      disabled={!hasUnsavedChanges}
+                    >
+                      元に戻す
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="success"
+                      size="small"
+                      startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
+                      onClick={handleSaveEdits}
+                      disabled={!hasUnsavedChanges || saving}
+                    >
+                      {saving ? '保存中...' : '保存'}
+                    </Button>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      startIcon={<PrintIcon />}
+                      onClick={handleExportPDF}
+                      sx={{ bgcolor: '#4f46e5', '&:hover': { bgcolor: '#4338ca' } }}
+                    >
+                      印刷
+                    </Button>
+                    <Tooltip
+                      title="PDFとして保存したい場合は、印刷画面の送信先で「PDFに保存」または「Microsoft Print to PDF」を選択してください"
+                      placement="top"
+                      arrow
+                    >
+                      <InfoOutlinedIcon sx={{ fontSize: 18, color: 'text.disabled', cursor: 'default', ml: -0.5 }} />
+                    </Tooltip>
+                  </Stack>
+                )}
+              </Stack>
+
+              {optimizeResult.assignments === null ? (
+                <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
+                  <Typography color="text.secondary" variant="body2">解が見つかりませんでした</Typography>
+                </Paper>
+              ) : assignmentGrid ? (
+                <TableContainer
+                  component={Paper}
+                  variant="outlined"
+                  sx={{ maxHeight: 'calc(100vh - 320px)', minHeight: 300, borderRadius: 2 }}
+                >
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell
+                          sx={{
+                            position: 'sticky', left: 0, top: 0, zIndex: 4,
+                            bgcolor: 'grey.50', minWidth: 120, fontWeight: 600, fontSize: 11,
+                            textTransform: 'uppercase', color: 'text.secondary',
+                            borderRight: '2px solid', borderColor: 'grey.300',
+                          }}
+                        >
+                          スタッフ
+                        </TableCell>
+                        {monthDays.map(date => {
+                          const day = new Date(date + 'T00:00:00+09:00').getDay();
+                          const shortageSlots = Object.entries(requiredCountMap[date] ?? {})
+                            .filter(([st, req]) => req !== null && req > 0 && (summaryCounts?.[date]?.[st] ?? 0) < req)
+                            .map(([st, req]) => `${st}: ${summaryCounts?.[date]?.[st] ?? 0}/${req}人`);
+                          const isShortage = shortageSlots.length > 0;
+                          return (
+                            <TableCell
+                              key={date}
+                              align="center"
+                              sx={{
+                                minWidth: 36, px: 0.5, py: 0.75, fontSize: 11,
+                                color: day === 0 ? 'error.main' : day === 6 ? 'primary.main' : 'text.secondary',
+                                bgcolor: day === 0 ? '#fef2f2' : day === 6 ? '#eff6ff' : 'grey.50',
+                              }}
+                            >
+                              <Box sx={{ position: 'relative', display: 'inline-flex', flexDirection: 'column', alignItems: 'center' }}>
+                                {isShortage && (
+                                  <Tooltip
+                                    title={
+                                      <Box>
+                                        {shortageSlots.map(s => <Box key={s} sx={{ fontSize: 11 }}>{s}</Box>)}
+                                      </Box>
+                                    }
+                                    placement="top"
+                                    arrow
+                                  >
+                                    <Box sx={{
+                                      position: 'absolute', top: -4, right: -8,
+                                      width: 14, height: 14, borderRadius: '50%',
+                                      bgcolor: 'error.main', color: 'white',
+                                      fontSize: 9, fontWeight: 700,
+                                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                      cursor: 'default', zIndex: 1,
+                                    }}>
+                                      !
+                                    </Box>
+                                  </Tooltip>
+                                )}
+                                <Box
+                                  sx={date === todayDateStr ? {
+                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 20, height: 20, borderRadius: '50%', bgcolor: 'primary.main',
+                                    color: 'white', fontSize: 11, fontWeight: 700,
+                                  } : { fontWeight: 700 }}
+                                >
+                                  {getDayNum(date)}
+                                </Box>
+                                <Box sx={{ fontSize: 10 }}>{getWeekdayLabel(date)}</Box>
+                              </Box>
+                            </TableCell>
+                          );
+                        })}
+                        <TableCell align="center" sx={{ minWidth: 64, fontWeight: 600, fontSize: 11, color: 'text.secondary', borderLeft: '2px solid', borderColor: 'grey.400', whiteSpace: 'nowrap', bgcolor: 'grey.50' }}>
+                          出勤日数
+                        </TableCell>
+                        <TableCell align="center" sx={{ minWidth: 72, fontWeight: 600, fontSize: 11, color: 'text.secondary', whiteSpace: 'nowrap', bgcolor: 'grey.50' }}>
+                          希望充足率
+                        </TableCell>
+                        <TableCell align="center" sx={{ minWidth: 64, fontWeight: 600, fontSize: 11, color: 'text.secondary', whiteSpace: 'nowrap', bgcolor: 'grey.50' }}>
+                          最大連勤
+                        </TableCell>
+                        <TableCell align="center" sx={{ minWidth: 80, fontWeight: 600, fontSize: 11, color: 'text.secondary', whiteSpace: 'nowrap', bgcolor: 'grey.50', '@media print': { display: 'none' } }}>
+                          給与目安
+                        </TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {Object.entries(assignmentGrid).map(([name, dateMap]) => {
+                        const summary = staffMonthlySummary.find(s => s.name === name);
+                        const rateColor = summary?.satisfactionRate === null || summary?.satisfactionRate === undefined
+                          ? 'text.disabled'
+                          : summary.satisfactionRate >= 80 ? 'success.main'
+                          : summary.satisfactionRate >= 60 ? 'warning.main'
+                          : 'error.main';
+                        const consecFontWeight = (summary?.maxConsecutive ?? 0) >= 5 ? 700 : 400;
+                        const consecColor = (summary?.maxConsecutive ?? 0) >= 7 ? 'error.main'
+                          : (summary?.maxConsecutive ?? 0) >= 5 ? 'warning.main'
+                          : 'text.secondary';
+                        return (
+                          <TableRow key={name} hover>
+                            <TableCell
+                              sx={{
+                                position: 'sticky', left: 0, bgcolor: 'background.paper', zIndex: 1,
+                                fontWeight: 500, whiteSpace: 'nowrap',
+                                borderRight: '2px solid', borderColor: 'grey.300',
+                              }}
+                            >
+                              {name}
+                            </TableCell>
+                            {monthDays.map(date => {
+                              const shiftType = dateMap[date];
+                              const isActive = popoverInfo?.staffName === name && popoverInfo?.date === date;
+                              const day = new Date(date + 'T00:00:00+09:00').getDay();
+                              const isVacation = !shiftType && groupedByStaff[name]?.[date]?.status === 'no';
+                              return (
+                                <TableCell
+                                  key={date}
+                                  align="center"
+                                  onClick={e => handleCellClick(name, date, e)}
+                                  sx={{
+                                    px: 0.5, py: 0.5, cursor: 'pointer',
+                                    bgcolor: isActive ? '#dbeafe'
+                                      : day === 0 ? '#fef2f2'
+                                      : day === 6 ? '#eff6ff'
+                                      : 'transparent',
+                                    '&:hover': {
+                                      bgcolor: day === 0 ? '#fee2e2'
+                                        : day === 6 ? '#dbeafe'
+                                        : 'action.hover',
+                                    },
+                                  }}
+                                >
+                                  {shiftType ? (
+                                    <Chip
+                                      label={shiftType}
+                                      size="small"
+                                      sx={{ bgcolor: '#dcfce7', color: '#166534', height: 20, fontSize: 10, fontWeight: 600, '& .MuiChip-label': { px: 0.75 } }}
+                                    />
+                                  ) : isVacation ? (
+                                    <Chip
+                                      label="休暇希望"
+                                      size="small"
+                                      sx={{
+                                        bgcolor: '#fee2e2', color: '#991b1b',
+                                        height: 20, fontSize: 9, fontWeight: 600,
+                                        '& .MuiChip-label': { px: 0.75 },
+                                        '@media print': { display: 'none' },
+                                      }}
+                                    />
+                                  ) : null}
+                                </TableCell>
+                              );
+                            })}
+                            <TableCell align="center" sx={{ fontWeight: 700, borderLeft: '2px solid', borderColor: 'grey.400' }}>
+                              {summary && Object.keys(summary.byType).length > 0 ? (
+                                <Tooltip
+                                  title={
+                                    <Box>
+                                      {Object.entries(summary.byType).map(([st, cnt]) => (
+                                        <Box key={st} sx={{ fontSize: 11 }}>{st}: {cnt}日</Box>
+                                      ))}
+                                    </Box>
+                                  }
+                                  placement="top"
+                                  arrow
+                                >
+                                  <Box sx={{ cursor: 'default', display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                    {summary.total}日
+                                    <InfoOutlinedIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
+                                  </Box>
+                                </Tooltip>
+                              ) : (
+                                <>{summary?.total ?? 0}日</>
+                              )}
+                            </TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600, color: rateColor, fontSize: 13 }}>
+                              {summary?.satisfactionRate !== null && summary?.satisfactionRate !== undefined
+                                ? `${summary.satisfactionRate}%` : '-'}
+                            </TableCell>
+                            <TableCell align="center" sx={{ color: consecColor, fontWeight: consecFontWeight, fontSize: 13 }}>
+                              {(summary?.maxConsecutive ?? 0) > 0 ? `${summary?.maxConsecutive}日` : '-'}
+                              {(summary?.maxConsecutive ?? 0) >= 5 && ' ⚠️'}
+                            </TableCell>
+                            <TableCell align="center" sx={{ fontSize: 13, whiteSpace: 'nowrap', '@media print': { display: 'none' } }}>
+                              {(() => {
+                                const wage = staffNameToWage[name];
+                                if (wage == null || !summary?.total) return <Typography variant="body2" color="text.disabled">-</Typography>;
+                                const est = wage * summary.total * 8;
+                                return <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main' }}>¥{est.toLocaleString()}</Typography>;
+                              })()}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                    <TableFooter sx={{ borderTop: '2px solid', borderColor: 'grey.300' }}>
+                      <TableRow sx={{ bgcolor: 'grey.50' }}>
+                        <TableCell
+                          colSpan={monthDays.length + 1}
+                          sx={{ position: 'sticky', left: 0, bgcolor: 'grey.50', zIndex: 1, fontSize: 10, fontWeight: 600, color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                        >
+                          勤務区分別人数
+                        </TableCell>
+                        <TableCell colSpan={4} sx={{ borderLeft: '2px solid', borderColor: 'grey.400' }} />
+                      </TableRow>
+                      {allShiftTypes.map((st, i) => {
+                        const rowBg = i % 2 === 0 ? '#eff6ff' : '#eef2ff';
+                        const textColor = i % 2 === 0 ? '#1d4ed8' : '#4338ca';
+                        const dotDefault = i % 2 === 0 ? '#3b82f6' : '#6366f1';
+                        return (
+                          <TableRow key={st} sx={{ bgcolor: rowBg }}>
+                            <TableCell sx={{ position: 'sticky', left: 0, bgcolor: rowBg, zIndex: 1, fontSize: 11, fontWeight: 600, color: textColor, whiteSpace: 'nowrap' }}>
+                              {st}
+                            </TableCell>
+                            {monthDays.map(date => {
+                              const count = summaryCounts?.[date]?.[st] ?? 0;
+                              const required = requiredCountMap[date]?.[st] ?? null;
+                              const hasReq = required !== null && required > 0;
+                              const status = hasReq ? count < required! ? 'shortage' : count === required! ? 'exact' : 'surplus' : null;
+                              const dotColor = status === 'shortage' ? '#ef4444' : status === 'exact' ? '#3b82f6' : status === 'surplus' ? '#16a34a' : dotDefault;
+                              const reqColor = status === 'shortage' ? 'error.main' : status === 'exact' ? 'primary.main' : 'success.main';
+                              return (
+                                <TableCell key={date} align="center" sx={{ px: 0.5, py: 0.75 }}>
+                                  {count > 0 ? (
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                      <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: '50%', bgcolor: dotColor, color: 'white', fontSize: 10, fontWeight: 700 }}>
+                                        {count}
+                                      </Box>
+                                      {hasReq && <Typography variant="caption" sx={{ fontSize: 9, lineHeight: 1, mt: 0.25, fontWeight: 500, color: reqColor }}>/{required}</Typography>}
+                                    </Box>
+                                  ) : hasReq ? (
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                      <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: '50%', bgcolor: 'error.main', color: 'white', fontSize: 10, fontWeight: 700 }}>0</Box>
+                                      <Typography variant="caption" sx={{ fontSize: 9, lineHeight: 1, mt: 0.25, fontWeight: 500, color: 'error.main' }}>/{required}</Typography>
+                                    </Box>
+                                  ) : (
+                                    <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: 10 }}>-</Typography>
+                                  )}
+                                </TableCell>
+                              );
+                            })}
+                            <TableCell colSpan={4} sx={{ borderLeft: '2px solid', borderColor: 'grey.400' }} />
+                          </TableRow>
+                        );
+                      })}
+                      <TableRow sx={{ bgcolor: 'grey.100', borderTop: '1px solid', borderColor: 'grey.200' }}>
+                        <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'grey.100', zIndex: 1, fontSize: 11, fontWeight: 700 }}>
+                          合計
+                        </TableCell>
+                        {monthDays.map(date => {
+                          const total = Object.values(summaryCounts?.[date] ?? {}).reduce((a, b) => a + b, 0);
+                          const totalReq = Object.values(requiredCountMap[date] ?? {}).filter((v): v is number => v !== null).reduce((a, b) => a + b, 0);
+                          const hasReq = totalReq > 0;
+                          const totalStatus = hasReq ? total < totalReq ? 'shortage' : total === totalReq ? 'exact' : 'surplus' : null;
+                          const totalColor = totalStatus === 'shortage' ? 'error.main' : totalStatus === 'exact' ? 'primary.main' : totalStatus === 'surplus' ? 'success.main' : 'text.primary';
+                          return (
+                            <TableCell key={date} align="center" sx={{ px: 0.5, py: 0.75 }}>
+                              {total > 0 ? (
+                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                  <Typography variant="caption" sx={{ fontSize: 11, fontWeight: 700, color: totalColor }}>{total}</Typography>
+                                  {hasReq && <Typography variant="caption" sx={{ fontSize: 9, lineHeight: 1, fontWeight: 500, color: totalColor }}>/{totalReq}</Typography>}
+                                </Box>
+                              ) : (
+                                <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: 10 }}>-</Typography>
+                              )}
+                            </TableCell>
+                          );
+                        })}
+                        <TableCell colSpan={4} sx={{ borderLeft: '2px solid', borderColor: 'grey.400' }} />
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
+                </TableContainer>
+              ) : null}
+            </>
+          )}
+        </Box>
+      )}
+
+      {/* セル編集ポップオーバー */}
+      <Popover
+        open={Boolean(anchorEl)}
+        anchorEl={anchorEl}
+        onClose={handlePopoverClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        slotProps={{ paper: { sx: { minWidth: 88, borderRadius: 2 } } }}
+      >
+        <MenuList dense>
+          <MenuItem
+            onClick={() => { if (popoverInfo) { handleCellEdit(popoverInfo.staffName, popoverInfo.date, ''); } handlePopoverClose(); }}
+            sx={{ fontSize: 12, color: 'text.secondary' }}
           >
             なし
-          </button>
+          </MenuItem>
           {(store?.time_slots ?? []).map(slot => (
-            <button
+            <MenuItem
               key={slot}
-              onClick={() => { handleCellEdit(activeCell.staffName, activeCell.date, slot); setActiveCell(null); }}
-              className="w-full text-left px-3 py-1.5 text-xs font-medium text-gray-800 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+              onClick={() => { if (popoverInfo) { handleCellEdit(popoverInfo.staffName, popoverInfo.date, slot); } handlePopoverClose(); }}
+              sx={{ fontSize: 12, fontWeight: 500 }}
             >
               {slot}
-            </button>
+            </MenuItem>
           ))}
-        </div>
-      </>
-    )}
+        </MenuList>
+      </Popover>
     </>
   );
 }

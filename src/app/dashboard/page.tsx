@@ -1,28 +1,51 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDashboardData } from '@/hooks';
 import StoreSummary from './components/StoreSummary';
 import StaffList from './components/StaffList';
 import ShiftPreferencesTable from './components/ShiftPreferencesTable';
+import PaymentSettings from './components/PaymentSettings';
 import { supabase } from '@/lib/supabase/client';
-import type { Staff } from '@/types';
+import type { Staff, Store } from '@/types';
+import { updateStaffStoreSettings } from '@/services';
+import AppBar from '@mui/material/AppBar';
+import Toolbar from '@mui/material/Toolbar';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import Container from '@mui/material/Container';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import CircularProgress from '@mui/material/CircularProgress';
+import Alert from '@mui/material/Alert';
+import Paper from '@mui/material/Paper';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import LogoutIcon from '@mui/icons-material/Logout';
 
-type Tab = 'shifts' | 'staff' | 'store';
+type DashTab = 'shifts' | 'staff' | 'store' | 'payment';
 
-const TABS: { id: Tab; label: string }[] = [
+const STORE_TABS: { id: DashTab; label: string }[] = [
   { id: 'shifts', label: 'シフト希望' },
   { id: 'staff', label: 'スタッフ' },
   { id: 'store', label: '店舗設定' },
 ];
 
+const ALL_TABS: { id: DashTab; label: string }[] = [
+  ...STORE_TABS,
+  { id: 'payment', label: '支払い' },
+];
+
 export default function Dashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<Tab>('shifts');
+  const [activeTab, setActiveTab] = useState<DashTab>('shifts');
   const {
     user,
     stores,
+    setStores,
     selectedStoreId,
     setSelectedStoreId,
     staff,
@@ -36,32 +59,58 @@ export default function Dashboard() {
     setStaff(prev => prev.map(s => s.id === updated.id ? updated : s));
   };
 
+  const handleStaffAdd = (newStaff: Staff) => {
+    setStaff(prev => [...prev, newStaff]);
+  };
+
+  const handleUpdateStores = (updatedStores: Store[]) => {
+    const oldSlots = stores.find(s => s.id === selectedStoreId)?.time_slots ?? [];
+    const newSlots = updatedStores.find(s => s.id === selectedStoreId)?.time_slots ?? [];
+    const deletedSlots = oldSlots.filter(slot => !newSlots.includes(slot));
+
+    if (deletedSlots.length > 0) {
+      setStaff(prev => prev.map(s => {
+        if (!s.preferred_time_slots?.some(slot => deletedSlots.includes(slot))) return s;
+        const cleaned = (s.preferred_time_slots ?? []).filter(slot => !deletedSlots.includes(slot));
+        updateStaffStoreSettings(s.line_user_id, s.store_id, { preferred_time_slots: cleaned });
+        return { ...s, preferred_time_slots: cleaned };
+      }));
+    }
+
+    setStores(updatedStores);
+  };
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [loading, user, router]);
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-500">読み込み中...</p>
-      </div>
+      <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
+        <Box sx={{ textAlign: 'center' }}>
+          <CircularProgress />
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>読み込み中...</Typography>
+        </Box>
+      </Box>
     );
   }
 
   if (errorMsg) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow p-6 text-center max-w-md w-full">
-          <p className="text-red-600 font-medium">{errorMsg}</p>
-          <button
-            onClick={() => supabase.auth.signOut().then(() => router.push('/login'))}
-            className="mt-4 px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50"
-          >
+      <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, bgcolor: 'background.default' }}>
+        <Paper elevation={2} sx={{ p: 4, borderRadius: 3, textAlign: 'center', maxWidth: 440, width: '100%' }}>
+          <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>
+          <Button variant="outlined" onClick={() => supabase.auth.signOut().then(() => router.push('/login'))}>
             ログイン画面へ
-          </button>
-        </div>
-      </div>
+          </Button>
+        </Paper>
+      </Box>
     );
   }
 
   if (!user) {
-    router.push('/login');
     return null;
   }
 
@@ -73,80 +122,79 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* ヘッダー */}
-      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-          {/* 左: タイトル + 店舗セレクタ */}
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="text-lg font-bold text-gray-900 whitespace-nowrap">📅 シフト管理</span>
-            {stores.length > 1 ? (
-              <select
-                value={selectedStoreId || ''}
-                onChange={(e) => handleStoreChange(e.target.value)}
-                className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0 truncate"
-              >
-                {stores.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            ) : selectedStore ? (
-              <span className="text-sm text-gray-600 truncate">{selectedStore.name}</span>
-            ) : null}
-          </div>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+      <AppBar position="sticky" color="default" elevation={1} sx={{ bgcolor: 'white' }}>
+        <Toolbar sx={{ gap: 2, minHeight: { xs: 56 } }}>
+          <CalendarMonthIcon color="primary" />
+          <Typography variant="subtitle1" noWrap sx={{ fontWeight: 'bold', mr: 1 }}>
+            シフト管理
+          </Typography>
 
-          {/* 右: ユーザー + ログアウト */}
-          <div className="flex items-center gap-3 shrink-0">
-            <span className="text-sm text-gray-500 hidden sm:block truncate max-w-[200px]">
-              {user.email}
-            </span>
-            <button
-              onClick={() => supabase.auth.signOut().then(() => router.push('/login'))}
-              className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors whitespace-nowrap"
+          {stores.length > 1 ? (
+            <Select
+              value={selectedStoreId || ''}
+              onChange={(e) => handleStoreChange(e.target.value)}
+              size="small"
+              sx={{ minWidth: 140 }}
             >
-              ログアウト
-            </button>
-          </div>
-        </div>
+              {stores.map(s => (
+                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
+              ))}
+            </Select>
+          ) : selectedStore ? (
+            <Typography variant="body2" color="text.secondary" noWrap>
+              {selectedStore.name}
+            </Typography>
+          ) : null}
 
-        {/* タブナビゲーション */}
-        {selectedStoreId && (
-          <div className="max-w-7xl mx-auto px-4 flex border-t border-gray-100">
-            {TABS.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </header>
+          <Box sx={{ flexGrow: 1 }} />
 
-      {/* メインコンテンツ */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {!selectedStoreId ? (
-          <div className="text-center text-gray-400 py-20">店舗を選択してください</div>
+          <Typography variant="body2" color="text.secondary" noWrap sx={{ display: { xs: 'none', sm: 'block' }, maxWidth: 200 }}>
+            {user.email}
+          </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<LogoutIcon />}
+            onClick={() => supabase.auth.signOut().then(() => router.push('/login'))}
+          >
+            ログアウト
+          </Button>
+        </Toolbar>
+
+        <Tabs
+          value={activeTab}
+          onChange={(_, v) => setActiveTab(v)}
+          sx={{ borderTop: '1px solid', borderColor: 'divider', minHeight: 42 }}
+          slotProps={{ indicator: { sx: { height: 3 } } }}
+        >
+          {ALL_TABS.map(tab => (
+            <Tab key={tab.id} value={tab.id} label={tab.label} sx={{ minHeight: 42, py: 1 }} />
+          ))}
+        </Tabs>
+      </AppBar>
+
+      <Container maxWidth="xl" sx={{ py: 3 }}>
+        {activeTab === 'payment' ? (
+          <PaymentSettings />
+        ) : !selectedStoreId ? (
+          <Box sx={{ textAlign: 'center', py: 10 }}>
+            <Typography color="text.disabled">店舗を選択してください</Typography>
+          </Box>
         ) : (
           <>
             {activeTab === 'shifts' && (
-              <ShiftPreferencesTable preferences={preferences} store={selectedStore ?? null} />
+              <ShiftPreferencesTable preferences={preferences} store={selectedStore ?? null} staff={staff} />
             )}
             {activeTab === 'staff' && (
-              <StaffList staff={staff} onStaffUpdate={handleStaffUpdate} />
+              <StaffList staff={staff} storeId={selectedStoreId} timeSlots={selectedStore?.time_slots ?? []} onStaffUpdate={handleStaffUpdate} onStaffAdd={handleStaffAdd} />
             )}
             {activeTab === 'store' && (
-              <StoreSummary selectedStoreId={selectedStoreId} stores={stores} />
+              <StoreSummary selectedStoreId={selectedStoreId} stores={stores} onUpdateStores={handleUpdateStores} />
             )}
           </>
         )}
-      </main>
-    </div>
+      </Container>
+    </Box>
   );
 }

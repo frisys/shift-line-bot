@@ -1,5 +1,7 @@
 // app/api/line/webhook/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+
+const devLog = (...args: unknown[]) => { if (process.env.NODE_ENV !== 'production') console.log(...args); };
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import {
@@ -58,27 +60,27 @@ export async function POST(req: NextRequest) {
       profile = { displayName: 'ゲストユーザー' };
     }
 
-    console.log('イベント処理開始:', event.type, 'ユーザーID:', lineUserId);
+    devLog('イベント処理開始:', event.type, 'ユーザーID:', lineUserId);
     if (event.type === 'follow') {
-      console.log('友達追加イベント受信');
-      console.log('LINE User ID:', lineUserId);
-      console.log('表示名:', profile.displayName);
+      devLog('友達追加イベント受信');
+      devLog('LINE User ID:', lineUserId);
+      devLog('表示名:', profile.displayName);
       await handleFollow(event as FollowEvent, profile);
     } else if (event.type === 'message') {
       const messageEvent = event as MessageEvent;
       if (messageEvent.message.type === 'text') {
-        console.log('メッセージイベント:', lineUserId, '内容:', messageEvent.message.text);
+        devLog('メッセージイベント:', lineUserId, '内容:', messageEvent.message.text);
       }
       if (messageEvent.replyToken && messageEvent.message.type === 'text') {
         await messagingClient.replyMessage({
           replyToken: messageEvent.replyToken,
           messages: [{ type: 'text', text: '処理中です...！' }],
         });
-        console.log('即時返信完了:', event.type, 'ユーザーID:', lineUserId);
+        devLog('即時返信完了:', event.type, 'ユーザーID:', lineUserId);
       }
       await handleMessage(messageEvent);
     } else if (event.type === 'postback') {
-      console.log('ポストバックイベント:', lineUserId, 'データ:', (event as PostbackEvent).postback.data);
+      devLog('ポストバックイベント:', lineUserId, 'データ:', (event as PostbackEvent).postback.data);
       await handlePostback(event as PostbackEvent);
     }
   }
@@ -108,7 +110,7 @@ async function handleFollow(event: FollowEvent, profile: Profile | { displayName
       return;
     }
 
-    console.log('登録成功！inserted data:', data);
+    devLog('登録成功！inserted data:', data);
   } catch (err) {
     console.error('handleFollow全体エラー:', err);
   }
@@ -155,7 +157,7 @@ async function handleMessage(event: MessageEvent) {
 async function handleStoreCodeInput(lineUserId: string, code: string) {
   const trimmedCode = code.trim(); // スペース除去
   const upperCode = trimmedCode.toUpperCase();
-  console.log('店舗コード入力受信！入力値:', upperCode);
+  devLog('店舗コード入力受信！入力値:', upperCode);
 
   // クエリ実行前にログ
   const { data: store, error } = await supabase
@@ -164,8 +166,8 @@ async function handleStoreCodeInput(lineUserId: string, code: string) {
     .eq('store_code', upperCode)
     .single();
 
-  console.log('クエリ結果 - error:', error);
-  console.log('クエリ結果 - data:', store);
+  devLog('クエリ結果 - error:', error);
+  devLog('クエリ結果 - data:', store);
 
   if (error || !store) {
     console.error('店舗検索失敗:', error?.message || 'レコードなし');
@@ -176,7 +178,7 @@ async function handleStoreCodeInput(lineUserId: string, code: string) {
     return;
   }
 
-  console.log('店舗発見！ID:', store.id, '名前:', store.name);
+  devLog('店舗発見！ID:', store.id, '名前:', store.name);
 
   // 登録確認のFlexメッセージ
   const confirmRegisterMessage: messagingApi.FlexMessage = {
@@ -1398,17 +1400,17 @@ async function createAndSetRichMenu(lineUserId: string) {
     // リッチメニュー作成
     const createResponse = await messagingClient.createRichMenu(richMenu);
     const richMenuId = createResponse.richMenuId;
-    console.log('リッチメニュー作成成功:', richMenuId);
+    devLog('リッチメニュー作成成功:', richMenuId);
 
     // 画像アップロード
     const imageBuffer = await fs.readFile('public/rich-menu.png');
     await blobClient.setRichMenuImage(richMenuId, new Blob([imageBuffer], { type: 'image/png' }));
-    console.log('リッチメニュー画像アップロード成功');
+    devLog('リッチメニュー画像アップロード成功');
 
     // **ユーザーごとに適用**（これが大事！）
     await messagingClient.linkRichMenuIdToUser(lineUserId, richMenuId);
 
-    console.log('リッチメニューをユーザー', lineUserId, 'に適用成功');
+    devLog('リッチメニューをユーザー', lineUserId, 'に適用成功');
 
     return richMenuId;
   } catch (err) {

@@ -1,91 +1,142 @@
 // components/StaffList.tsx
 import { useState } from 'react';
 import StaffEditModal from './StaffEditModal';
+import StaffAddModal from './StaffAddModal';
 import { Staff } from '@/types';
 import { STAFF_ROLE_LABELS, getJapaneseWeekday } from '@/constants';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Stack from '@mui/material/Stack';
+import EditIcon from '@mui/icons-material/Edit';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
 
 interface StaffListProps {
   staff: Staff[];
+  storeId: string;
+  timeSlots?: string[];
   onStaffUpdate: (updated: Staff) => void;
+  onStaffAdd: (newStaff: Staff) => void;
 }
 
-export default function StaffList({ staff, onStaffUpdate }: StaffListProps) {
+export default function StaffList({ staff, storeId, timeSlots = [], onStaffUpdate, onStaffAdd }: StaffListProps) {
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
+  const [addingStaff, setAddingStaff] = useState(false);
 
   const handleCloseModal = () => setEditingStaff(null);
 
   return (
-    <section className="mb-10">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold text-gray-700">スタッフ一覧</h2>
-        <span className="text-sm text-gray-500">{staff.length}名</span>
-      </div>
+    <Box sx={{ mb: 5 }}>
+      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+        <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5 }}>
+          <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 600 }}>
+            スタッフ一覧
+          </Typography>
+          <Typography variant="body2" color="text.disabled">{staff.length}名</Typography>
+        </Stack>
+        <Button
+          variant="contained"
+          size="small"
+          startIcon={<PersonAddIcon />}
+          onClick={() => setAddingStaff(true)}
+        >
+          スタッフを追加
+        </Button>
+      </Stack>
 
       {staff.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500">
-          この店舗にはスタッフが登録されていません
-        </div>
+        <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
+          <Typography color="text.secondary">この店舗にはスタッフが登録されていません</Typography>
+        </Paper>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                {['名前', '役割', '最大連勤', '週最大', '苦手曜日', ''].map(label => (
-                  <th
+        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+          <Table>
+            <TableHead sx={{ bgcolor: 'grey.50' }}>
+              <TableRow>
+                {['名前', '役割', '最大連勤', '週最大', '苦手曜日', '苦手時間帯', '時給', ''].map(label => (
+                  <TableCell
                     key={label}
-                    className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em' }}
                   >
                     {label}
-                  </th>
+                  </TableCell>
                 ))}
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {staff.map(s => (
-                <tr key={s.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                <TableRow key={s.id} hover>
+                  <TableCell sx={{ fontWeight: 500 }}>
                     {s.name || '未設定'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      s.role === 'manager'
-                        ? 'bg-purple-100 text-purple-800'
-                        : 'bg-blue-100 text-blue-800'
-                    }`}>
-                      {STAFF_ROLE_LABELS[s.role as keyof typeof STAFF_ROLE_LABELS] ?? s.role}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {s.max_consecutive_days ?? '-'}日
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {s.max_weekly_days ?? '-'}日
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={STAFF_ROLE_LABELS[s.role as keyof typeof STAFF_ROLE_LABELS] ?? s.role}
+                      size="small"
+                      color={s.role === 'manager' ? 'secondary' : 'primary'}
+                      variant="outlined"
+                    />
+                  </TableCell>
+                  <TableCell sx={{ color: 'text.secondary' }}>
+                    {s.max_consecutive_days != null ? `${s.max_consecutive_days}日` : '-'}
+                  </TableCell>
+                  <TableCell sx={{ color: 'text.secondary' }}>
+                    {s.max_weekly_days != null ? `${s.max_weekly_days}日` : '-'}
+                  </TableCell>
+                  <TableCell sx={{ color: 'text.secondary' }}>
                     {s.unavailable_days?.map(d => getJapaneseWeekday(d)).join('・') || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <button
-                      onClick={() => setEditingStaff(s)}
-                      className="text-blue-600 hover:text-blue-800 text-sm"
-                    >
+                  </TableCell>
+                  <TableCell>
+                    {s.preferred_time_slots?.length ? (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {s.preferred_time_slots.map(slot => (
+                          <Chip key={slot} label={slot} size="small" color="warning" variant="outlined" />
+                        ))}
+                      </Box>
+                    ) : (
+                      <Typography variant="body2" color="text.disabled">-</Typography>
+                    )}
+                  </TableCell>
+                  <TableCell sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
+                    {s.hourly_wage != null ? `¥${s.hourly_wage.toLocaleString()}/h` : '-'}
+                  </TableCell>
+                  <TableCell align="right">
+                    <Button size="small" startIcon={<EditIcon />} onClick={() => setEditingStaff(s)}>
                       編集
-                    </button>
-                  </td>
-                </tr>
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
 
       {editingStaff && (
         <StaffEditModal
           staff={editingStaff}
+          timeSlots={timeSlots}
           onClose={handleCloseModal}
           onSaved={onStaffUpdate}
         />
       )}
-    </section>
+
+      {addingStaff && (
+        <StaffAddModal
+          storeId={storeId}
+          timeSlots={timeSlots}
+          onClose={() => setAddingStaff(false)}
+          onAdded={onStaffAdd}
+        />
+      )}
+    </Box>
   );
 }

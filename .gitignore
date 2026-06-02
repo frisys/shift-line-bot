@@ -15,3 +15,9 @@ pnpm-debug.log*
 .idea/
 coverage/
 .cache/
+
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
+
+# Local environment config (contains API keys)
+config/local.json

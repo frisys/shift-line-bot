@@ -21,9 +21,26 @@ export async function GET(
       );
     }
 
+    const userId = req.nextUrl.searchParams.get('userId');
+    if (!userId) {
+      return NextResponse.json({ error: 'userId は必須です' }, { status: 400 });
+    }
+
+    // ユーザーが店舗に所属しているか検証
+    const { data: membership } = await supabase
+      .from('user_stores')
+      .select('user_id')
+      .eq('user_id', userId)
+      .eq('store_id', id)
+      .maybeSingle();
+
+    if (!membership) {
+      return NextResponse.json({ error: 'この店舗へのアクセス権限がありません' }, { status: 403 });
+    }
+
     const { data, error } = await supabase
       .from('stores')
-      .select('id, name, store_code')
+      .select('id, name')
       .eq('id', id)
       .single();
 
