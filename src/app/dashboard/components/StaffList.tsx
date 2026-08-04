@@ -1,7 +1,6 @@
 // components/StaffList.tsx
 import { useState } from 'react';
 import StaffEditModal from './StaffEditModal';
-import StaffAddModal from './StaffAddModal';
 import { Staff } from '@/types';
 import { STAFF_ROLE_LABELS, getJapaneseWeekday } from '@/constants';
 import Box from '@mui/material/Box';
@@ -17,39 +16,25 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Stack from '@mui/material/Stack';
 import EditIcon from '@mui/icons-material/Edit';
-import PersonAddIcon from '@mui/icons-material/PersonAdd';
 
 interface StaffListProps {
   staff: Staff[];
-  storeId: string;
   timeSlots?: string[];
   onStaffUpdate: (updated: Staff) => void;
-  onStaffAdd: (newStaff: Staff) => void;
 }
 
-export default function StaffList({ staff, storeId, timeSlots = [], onStaffUpdate, onStaffAdd }: StaffListProps) {
+export default function StaffList({ staff, timeSlots = [], onStaffUpdate }: StaffListProps) {
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
-  const [addingStaff, setAddingStaff] = useState(false);
 
   const handleCloseModal = () => setEditingStaff(null);
 
   return (
     <Box sx={{ mb: 5 }}>
-      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5 }}>
-          <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 600 }}>
-            スタッフ一覧
-          </Typography>
-          <Typography variant="body2" color="text.disabled">{staff.length}名</Typography>
-        </Stack>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<PersonAddIcon />}
-          onClick={() => setAddingStaff(true)}
-        >
-          スタッフを追加
-        </Button>
+      <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5, mb: 2 }}>
+        <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 600 }}>
+          スタッフ一覧
+        </Typography>
+        <Typography variant="body2" color="text.disabled">{staff.length}名</Typography>
       </Stack>
 
       {staff.length === 0 ? (
@@ -61,7 +46,7 @@ export default function StaffList({ staff, storeId, timeSlots = [], onStaffUpdat
           <Table>
             <TableHead sx={{ bgcolor: 'grey.50' }}>
               <TableRow>
-                {['名前', '役割', '最大連勤', '週最大', '苦手曜日', '苦手時間帯', '時給', ''].map(label => (
+                {['氏名', '役割', '最大連勤', '週最大', '苦手曜日', '苦手時間帯', '時給', ''].map(label => (
                   <TableCell
                     key={label}
                     sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em' }}
@@ -74,8 +59,17 @@ export default function StaffList({ staff, storeId, timeSlots = [], onStaffUpdat
             <TableBody>
               {staff.map(s => (
                 <TableRow key={s.id} hover>
-                  <TableCell sx={{ fontWeight: 500 }}>
-                    {s.name || '未設定'}
+                  <TableCell>
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {s.display_name || s.name || '未設定'}
+                      </Typography>
+                      {s.display_name && (
+                        <Typography variant="caption" color="text.disabled">
+                          LINE名: {s.name || '未設定'}
+                        </Typography>
+                      )}
+                    </Box>
                   </TableCell>
                   <TableCell>
                     <Chip
@@ -129,14 +123,6 @@ export default function StaffList({ staff, storeId, timeSlots = [], onStaffUpdat
         />
       )}
 
-      {addingStaff && (
-        <StaffAddModal
-          storeId={storeId}
-          timeSlots={timeSlots}
-          onClose={() => setAddingStaff(false)}
-          onAdded={onStaffAdd}
-        />
-      )}
     </Box>
   );
 }

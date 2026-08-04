@@ -38,26 +38,37 @@ export function useDashboardData() {
         setUser(currentUser);
 
         devLog('[useDashboardData] stores 取得: 開始', { owner_user_id: currentUser.id });
-        const { data: storeData, error: storeError } = await supabase
-          .from('stores')
-          .select('*')
-          .eq('owner_user_id', currentUser.id);
-        devLog('[useDashboardData] stores 取得: 完了', { count: storeData?.length, error: storeError });
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        const accessToken = currentSession?.access_token;
 
-        if (storeError) throw storeError;
+        const [ownedResult, managedRes] = await Promise.all([
+          supabase.from('stores').select('*').eq('owner_user_id', currentUser.id),
+          accessToken
+            ? fetch('/api/stores/managed', { headers: { Authorization: `Bearer ${accessToken}` } })
+                .then(r => r.ok ? r.json() : { stores: [] })
+            : Promise.resolve({ stores: [] }),
+        ]);
+        devLog('[useDashboardData] stores 取得: 完了', { owned: ownedResult.data?.length, managed: managedRes.stores?.length });
 
-        if (!storeData?.length) {
-          console.warn('[useDashboardData] 店舗が見つかりません');
-          setErrorMsg('店舗が見つかりません');
+        if (ownedResult.error) throw ownedResult.error;
+
+        const ownedStores: Store[] = (ownedResult.data as Store[]) ?? [];
+        const managedStores: Store[] = (managedRes.stores as Store[]) ?? [];
+        const seenIds = new Set(ownedStores.map((s: Store) => s.id));
+        const merged = [...ownedStores, ...managedStores.filter((s: Store) => !seenIds.has(s.id))];
+
+        if (!merged.length) {
+          setStores([]);
+          setLoading(false);
           return;
         }
 
-        setStores(storeData as Store[]);
+        setStores(merged);
 
         // デフォルト選択
         const saved = localStorage.getItem('selectedStoreId');
-        const initial = saved ? storeData.find(s => s.id === saved) : storeData[0];
-        const activeId = initial?.id || storeData[0].id;
+        const initial = saved ? merged.find((s: Store) => s.id === saved) : merged[0];
+        const activeId = initial?.id || merged[0].id;
         devLog('[useDashboardData] selectedStoreId を設定:', activeId);
         setSelectedStoreId(activeId);
       } catch (err: unknown) {

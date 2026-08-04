@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const ENGINE_URL = process.env.OPTIMIZATION_ENGINE_URL ?? 'http://localhost:8000';
+const LAMBDA_URL = process.env.OPTIMIZE_LAMBDA_URL ?? '';
+const LAMBDA_SECRET = process.env.OPTIMIZE_LAMBDA_SECRET ?? '';
 
 export async function POST(req: NextRequest) {
   let body: unknown;
@@ -12,9 +13,12 @@ export async function POST(req: NextRequest) {
 
   let res: Response;
   try {
-    res = await fetch(`${ENGINE_URL}/optimize`, {
+    res = await fetch(LAMBDA_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-secret': LAMBDA_SECRET,
+      },
       body: JSON.stringify(body),
     });
   } catch (err) {

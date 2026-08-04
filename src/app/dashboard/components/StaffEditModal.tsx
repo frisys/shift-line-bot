@@ -65,7 +65,7 @@ export default function StaffEditModal({ staff, timeSlots = [], onClose, onSaved
     setSaving(true);
     try {
       const { error: profileError } = await updateStaffProfile(formData.id, {
-        name: formData.name || '',
+        display_name: formData.display_name || null,
       });
       if (profileError) throw profileError;
 
@@ -104,12 +104,21 @@ export default function StaffEditModal({ staff, timeSlots = [], onClose, onSaved
       <DialogContent sx={{ p: 3, pt: 3 }}>
         <Stack spacing={3} sx={{ mt: 1 }}>
           <TextField
-            label="名前"
-            name="name"
-            value={formData.name || ''}
+            label="LINE名"
+            value={formData.name || '未設定'}
+            fullWidth
+            size="small"
+            slotProps={{ input: { readOnly: true } }}
+            sx={{ '& .MuiInputBase-input': { color: 'text.secondary' } }}
+          />
+          <TextField
+            label="表示名（任意）"
+            name="display_name"
+            value={formData.display_name || ''}
             onChange={handleChange}
             fullWidth
             size="small"
+            placeholder="未設定の場合は登録時の氏名を使用"
           />
 
           <FormControl fullWidth size="small">

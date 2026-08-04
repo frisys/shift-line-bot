@@ -7,6 +7,7 @@ import StoreSummary from './components/StoreSummary';
 import StaffList from './components/StaffList';
 import ShiftPreferencesTable from './components/ShiftPreferencesTable';
 import PaymentSettings from './components/PaymentSettings';
+import JoinStoreModal from './components/JoinStoreModal';
 import { supabase } from '@/lib/supabase/client';
 import type { Staff, Store } from '@/types';
 import { updateStaffStoreSettings } from '@/services';
@@ -25,6 +26,7 @@ import Alert from '@mui/material/Alert';
 import Paper from '@mui/material/Paper';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import LogoutIcon from '@mui/icons-material/Logout';
+import AddBusinessIcon from '@mui/icons-material/AddBusiness';
 
 type DashTab = 'shifts' | 'staff' | 'store' | 'payment';
 
@@ -42,6 +44,7 @@ const ALL_TABS: { id: DashTab; label: string }[] = [
 export default function Dashboard() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<DashTab>('shifts');
+  const [joinModalOpen, setJoinModalOpen] = useState(false);
   const {
     user,
     stores,
@@ -59,11 +62,7 @@ export default function Dashboard() {
     setStaff(prev => prev.map(s => s.id === updated.id ? updated : s));
   };
 
-  const handleStaffAdd = (newStaff: Staff) => {
-    setStaff(prev => [...prev, newStaff]);
-  };
-
-  const handleUpdateStores = (updatedStores: Store[]) => {
+const handleUpdateStores = (updatedStores: Store[]) => {
     const oldSlots = stores.find(s => s.id === selectedStoreId)?.time_slots ?? [];
     const newSlots = updatedStores.find(s => s.id === selectedStoreId)?.time_slots ?? [];
     const deletedSlots = oldSlots.filter(slot => !newSlots.includes(slot));
@@ -78,6 +77,12 @@ export default function Dashboard() {
     }
 
     setStores(updatedStores);
+  };
+
+  const handleJoined = (store: Store) => {
+    setStores(prev => [...prev, store]);
+    setSelectedStoreId(store.id);
+    localStorage.setItem('selectedStoreId', store.id);
   };
 
   useEffect(() => {
@@ -112,6 +117,45 @@ export default function Dashboard() {
 
   if (!user) {
     return null;
+  }
+
+  if (!loading && stores.length === 0) {
+    return (
+      <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, bgcolor: 'background.default' }}>
+        <Paper elevation={2} sx={{ p: 5, borderRadius: 3, textAlign: 'center', maxWidth: 440, width: '100%' }}>
+          <AddBusinessIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 2 }} />
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+            参加している店舗がありません
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            管理者から受け取った店舗コードを入力して店舗に参加してください。
+          </Typography>
+          <Button
+            variant="contained"
+            size="large"
+            startIcon={<AddBusinessIcon />}
+            onClick={() => setJoinModalOpen(true)}
+            sx={{ mb: 2 }}
+          >
+            店舗コードで参加
+          </Button>
+          <Box>
+            <Button
+              variant="text"
+              size="small"
+              color="inherit"
+              onClick={() => supabase.auth.signOut().then(() => router.push('/login'))}
+              sx={{ color: 'text.disabled' }}
+            >
+              ログアウト
+            </Button>
+          </Box>
+        </Paper>
+        {joinModalOpen && (
+          <JoinStoreModal onClose={() => setJoinModalOpen(false)} onJoined={handleJoined} />
+        )}
+      </Box>
+    );
   }
 
   const selectedStore = stores.find(s => s.id === selectedStoreId);
@@ -155,6 +199,14 @@ export default function Dashboard() {
           <Button
             variant="outlined"
             size="small"
+            startIcon={<AddBusinessIcon />}
+            onClick={() => setJoinModalOpen(true)}
+          >
+            店舗を追加
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
             startIcon={<LogoutIcon />}
             onClick={() => supabase.auth.signOut().then(() => router.push('/login'))}
           >
@@ -187,7 +239,7 @@ export default function Dashboard() {
               <ShiftPreferencesTable preferences={preferences} store={selectedStore ?? null} staff={staff} />
             )}
             {activeTab === 'staff' && (
-              <StaffList staff={staff} storeId={selectedStoreId} timeSlots={selectedStore?.time_slots ?? []} onStaffUpdate={handleStaffUpdate} onStaffAdd={handleStaffAdd} />
+              <StaffList staff={staff} timeSlots={selectedStore?.time_slots ?? []} onStaffUpdate={handleStaffUpdate} />
             )}
             {activeTab === 'store' && (
               <StoreSummary selectedStoreId={selectedStoreId} stores={stores} onUpdateStores={handleUpdateStores} />
@@ -195,6 +247,10 @@ export default function Dashboard() {
           </>
         )}
       </Container>
+
+      {joinModalOpen && (
+        <JoinStoreModal onClose={() => setJoinModalOpen(false)} onJoined={handleJoined} />
+      )}
     </Box>
   );
 }

@@ -56,7 +56,7 @@ export async function GET(
   // profiles 取得
   const { data: profilesData, error: profilesError } = await supabaseAdmin
     .from('profiles')
-    .select('id, name, line_user_id')
+    .select('id, name, display_name, line_user_id')
     .in('line_user_id', lineUserIds);
 
   if (profilesError) {
@@ -68,6 +68,7 @@ export async function GET(
     return {
       id: p.id,
       name: p.name,
+      display_name: (p as { display_name?: string | null }).display_name ?? null,
       role: mem?.role ?? 'staff',
       store_id: storeId,
       line_user_id: p.line_user_id ?? '',

@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase/client';
 import type { Staff } from '@/types';
 
-export async function updateStaffProfile(staffId: string, data: { name: string }) {
+export async function updateStaffProfile(staffId: string, data: { display_name: string | null }) {
   return supabase.from('profiles').update(data).eq('id', staffId);
 }
 
