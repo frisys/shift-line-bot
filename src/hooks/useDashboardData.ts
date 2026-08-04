@@ -112,33 +112,15 @@ export function useDashboardData() {
           .toISOString().split('T')[0];
 
         devLog('[useDashboardData] shift_preferences 取得: 開始', { store_id: selectedStoreId, startDate, endDate });
-        const { data: prefs, error: prefsError } = await supabase
-          .from('shift_preferences')
-          .select('*')
-          .eq('store_id', selectedStoreId)
-          .gte('shift_date', startDate)
-          .lte('shift_date', endDate);
-        devLog('[useDashboardData] shift_preferences 取得: 完了', { count: prefs?.length, error: prefsError });
-
-        const prefUserIds = [...new Set(prefs?.map(p => p.user_id) || [])];
-        devLog('[useDashboardData] profiles (シフト希望者名) 取得: 開始', { prefUserIds });
-        const { data: nameData, error: nameError } = await supabase
-          .from('profiles')
-          .select('id, name, line_user_id')
-          .in('line_user_id', prefUserIds);
-        devLog('[useDashboardData] profiles (シフト希望者名) 取得: 完了', { count: nameData?.length, error: nameError });
-
-        const nameMap: Record<string, string> = {};
-        nameData?.forEach(n => {
-          nameMap[n.line_user_id] = n.name || '不明';
-        });
-
-        const enrichedPrefs: ShiftPreference[] = prefs?.map(p => ({
-          ...p,
-          profiles: { name: nameMap[p.user_id] || '不明' }
-        })) || [];
-
-        devLog('[useDashboardData] enrichedPrefs 構築完了:', { count: enrichedPrefs.length });
+        const prefsRes = await fetch(
+          `/api/stores/${selectedStoreId}/shift-preferences?startDate=${startDate}&endDate=${endDate}`,
+          { headers: { Authorization: `Bearer ${session?.access_token}` } }
+        );
+        if (!prefsRes.ok) {
+          throw new Error(`shift-preferences API エラー: ${prefsRes.status}`);
+        }
+        const { preferences: enrichedPrefs } = await prefsRes.json() as { preferences: ShiftPreference[] };
+        devLog('[useDashboardData] shift_preferences 取得: 完了', { count: enrichedPrefs.length });
         setPreferences(enrichedPrefs);
       } catch (err: unknown) {
         console.error('[useDashboardData] fetchStoreData エラー:', err);
