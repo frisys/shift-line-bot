@@ -23,7 +23,7 @@ async function authorizeStoreOwner(request: NextRequest, storeId: string) {
     .select('id')
     .eq('id', storeId)
     .eq('owner_user_id', user.id)
-    .single();
+    .maybeSingle();
   if (!store) return { error: 'Forbidden', status: 403 as const };
 
   return { error: null, status: 200 as const };
@@ -46,10 +46,9 @@ export async function GET(
     .select('year_month, is_confirmed, assignments, score, detail')
     .eq('store_id', storeId)
     .eq('year_month', yearMonth)
-    .single();
+    .maybeSingle();
 
-  // PGRST116 = row not found（正常ケース）
-  if (error && error.code !== 'PGRST116') {
+  if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
