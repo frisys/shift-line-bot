@@ -52,17 +52,18 @@ interface OptimizeResult {
 }
 
 interface ShiftPreferencesTableProps {
-  preferences: ShiftPreference[];
   store: Store | null;
   staff?: Staff[];
 }
 
 const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
-export default function ShiftPreferencesTable({ preferences, store, staff = [] }: ShiftPreferencesTableProps) {
+export default function ShiftPreferencesTable({ store, staff = [] }: ShiftPreferencesTableProps) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth()); // 0-indexed
+  const [preferences, setPreferences] = useState<ShiftPreference[]>([]);
+  const [prefsLoading, setPrefsLoading] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeResult, setOptimizeResult] = useState<OptimizeResult | null>(null);
   const [optimizeError, setOptimizeError] = useState<string | null>(null);
@@ -119,6 +120,31 @@ export default function ShiftPreferencesTable({ preferences, store, staff = [] }
   }, [staff, userNameMap]);
 
   const staffNames = Object.keys(groupedByStaff);
+
+  // 月・店舗が変わるたびにシフト希望を再取得
+  useEffect(() => {
+    if (!store?.id) return;
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+    let cancelled = false;
+    setPrefsLoading(true);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.access_token || cancelled) return;
+      fetch(
+        `/api/stores/${store.id}/shift-preferences?startDate=${startDate}&endDate=${endDate}`,
+        { headers: { Authorization: `Bearer ${session.access_token}` } }
+      )
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(({ preferences: fetched }: { preferences: ShiftPreference[] }) => {
+          if (!cancelled) setPreferences(fetched);
+        })
+        .catch(() => { if (!cancelled) setPreferences([]); })
+        .finally(() => { if (!cancelled) setPrefsLoading(false); });
+    });
+    return () => { cancelled = true; };
+  }, [store?.id, year, month]);
 
   // 保存済みシフト確定結果を取得・復元
   const loadSavedConfirmation = useCallback(async () => {

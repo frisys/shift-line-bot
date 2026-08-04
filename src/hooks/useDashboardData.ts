@@ -5,14 +5,13 @@ const devLog = (...args: unknown[]) => { if (process.env.NODE_ENV !== 'productio
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { User, Store, Staff, ShiftPreference } from '@/types';
+import { User, Store, Staff } from '@/types';
 
 export function useDashboardData() {
   const [user, setUser] = useState<User | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
   const [staff, setStaff] = useState<Staff[]>([]);
-  const [preferences, setPreferences] = useState<ShiftPreference[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -104,24 +103,6 @@ export function useDashboardData() {
         devLog('[useDashboardData] staff API 取得: 完了', { count: staffList.length });
         setStaff(staffList);
 
-        // シフト希望（前月〜3ヶ月先まで取得）
-        const today = new Date();
-        const startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1)
-          .toISOString().split('T')[0];
-        const endDate = new Date(today.getFullYear(), today.getMonth() + 4, 0)
-          .toISOString().split('T')[0];
-
-        devLog('[useDashboardData] shift_preferences 取得: 開始', { store_id: selectedStoreId, startDate, endDate });
-        const prefsRes = await fetch(
-          `/api/stores/${selectedStoreId}/shift-preferences?startDate=${startDate}&endDate=${endDate}`,
-          { headers: { Authorization: `Bearer ${session?.access_token}` } }
-        );
-        if (!prefsRes.ok) {
-          throw new Error(`shift-preferences API エラー: ${prefsRes.status}`);
-        }
-        const { preferences: enrichedPrefs } = await prefsRes.json() as { preferences: ShiftPreference[] };
-        devLog('[useDashboardData] shift_preferences 取得: 完了', { count: enrichedPrefs.length });
-        setPreferences(enrichedPrefs);
       } catch (err: unknown) {
         console.error('[useDashboardData] fetchStoreData エラー:', err);
         setErrorMsg(err instanceof Error ? err.message : '店舗データ取得に失敗しました');
@@ -142,7 +123,6 @@ export function useDashboardData() {
     setSelectedStoreId,
     staff,
     setStaff,
-    preferences,
     loading,
     errorMsg,
   };

@@ -53,7 +53,6 @@ export default function Dashboard() {
     setSelectedStoreId,
     staff,
     setStaff,
-    preferences,
     loading,
     errorMsg,
   } = useDashboardData();
@@ -236,7 +235,7 @@ const handleUpdateStores = (updatedStores: Store[]) => {
         ) : (
           <>
             {activeTab === 'shifts' && (
-              <ShiftPreferencesTable preferences={preferences} store={selectedStore ?? null} staff={staff} />
+              <ShiftPreferencesTable store={selectedStore ?? null} staff={staff} />
             )}
             {activeTab === 'staff' && (
               <StaffList staff={staff} timeSlots={selectedStore?.time_slots ?? []} onStaffUpdate={handleStaffUpdate} />
