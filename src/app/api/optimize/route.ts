@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       { status: 503 }
     );
   }
-
+  console.log(res);
   let data: unknown;
   try {
     data = await res.json();
