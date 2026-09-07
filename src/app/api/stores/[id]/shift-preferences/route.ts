@@ -52,20 +52,38 @@ export async function GET(
   }
 
   const prefUserIds = [...new Set((prefs ?? []).map(p => p.user_id))];
-  const nameMap: Record<string, string> = {};
 
+  // 役割が管理者(admin)のユーザーはシフト希望・作成対象から除外する
+  const adminUserIds = new Set<string>();
   if (prefUserIds.length > 0) {
+    const { data: memberships } = await supabase
+      .from('user_stores')
+      .select('user_id, role')
+      .eq('store_id', storeId)
+      .in('user_id', prefUserIds);
+
+    memberships?.forEach(m => {
+      if (m.role === 'admin') adminUserIds.add(m.user_id);
+    });
+  }
+
+  const visiblePrefs = (prefs ?? []).filter(p => !adminUserIds.has(p.user_id));
+
+  const nameMap: Record<string, string> = {};
+  const visibleUserIds = [...new Set(visiblePrefs.map(p => p.user_id))];
+
+  if (visibleUserIds.length > 0) {
     const { data: profiles } = await supabase
       .from('profiles')
       .select('line_user_id, name')
-      .in('line_user_id', prefUserIds);
+      .in('line_user_id', visibleUserIds);
 
     profiles?.forEach(p => {
       nameMap[p.line_user_id] = p.name || '不明';
     });
   }
 
-  const enriched = (prefs ?? []).map(p => ({
+  const enriched = visiblePrefs.map(p => ({
     ...p,
     profiles: { name: nameMap[p.user_id] || '不明' },
   }));

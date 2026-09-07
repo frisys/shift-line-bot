@@ -13,6 +13,7 @@ import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
+import Backdrop from '@mui/material/Backdrop';
 import Tooltip from '@mui/material/Tooltip';
 import Popover from '@mui/material/Popover';
 import MenuList from '@mui/material/MenuList';
@@ -582,13 +583,21 @@ export default function ShiftPreferencesTable({ store, staff = [] }: ShiftPrefer
         <Button
           variant="contained"
           color="success"
-          startIcon={optimizing ? <CircularProgress size={16} color="inherit" /> : <AutoFixHighIcon />}
+          startIcon={<AutoFixHighIcon />}
           onClick={handleOptimize}
           disabled={optimizing}
         >
-          {optimizing ? '最適化中...' : 'シフトを作成'}
+          シフトを作成
         </Button>
       </Stack>
+
+      <Backdrop
+        open={optimizing}
+        sx={{ zIndex: (theme) => theme.zIndex.modal + 1, color: '#fff', flexDirection: 'column', gap: 2 }}
+      >
+        <CircularProgress color="inherit" />
+        <Typography variant="body1">最適化中...</Typography>
+      </Backdrop>
 
       {/* 最適化エラー */}
       {optimizeError && (
