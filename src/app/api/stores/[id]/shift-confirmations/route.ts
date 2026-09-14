@@ -18,13 +18,27 @@ async function authorizeStoreOwner(request: NextRequest, storeId: string) {
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return { error: 'Unauthorized', status: 401 as const };
 
-  const { data: store } = await supabase
-    .from('stores')
-    .select('id')
-    .eq('id', storeId)
-    .eq('owner_user_id', user.id)
-    .maybeSingle();
-  if (!store) return { error: 'Forbidden', status: 403 as const };
+  const [ownerResult, membershipResult] = await Promise.all([
+    supabase
+      .from('stores')
+      .select('id')
+      .eq('id', storeId)
+      .eq('owner_user_id', user.id)
+      .maybeSingle(),
+    supabase
+      .from('user_stores')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('store_id', storeId)
+      .maybeSingle(),
+  ]);
+
+  const isOwner = !!ownerResult.data;
+  const isManager = membershipResult.data?.role === 'manager' || membershipResult.data?.role === 'admin';
+
+  if (!isOwner && !isManager) {
+    return { error: 'Forbidden', status: 403 as const };
+  }
 
   return { error: null, status: 200 as const };
 }

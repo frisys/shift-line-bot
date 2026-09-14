@@ -22,22 +22,27 @@ export async function GET(
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // オーナーまたはマネージャーのみアクセス可
-  const { data: store } = await supabase
-    .from('stores')
-    .select('id')
-    .eq('id', storeId)
-    .eq('owner_user_id', user.id)
-    .maybeSingle();
-
-  if (!store) {
-    const { data: membership } = await supabase
+  // オーナーまたはマネージャー/管理者のみアクセス可
+  const [ownerResult, membershipResult] = await Promise.all([
+    supabase
+      .from('stores')
+      .select('id')
+      .eq('id', storeId)
+      .eq('owner_user_id', user.id)
+      .maybeSingle(),
+    supabase
       .from('user_stores')
       .select('role')
       .eq('store_id', storeId)
       .eq('user_id', user.id)
-      .maybeSingle();
-    if (!membership) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      .maybeSingle(),
+  ]);
+
+  const isOwner = !!ownerResult.data;
+  const isManager = membershipResult.data?.role === 'manager' || membershipResult.data?.role === 'admin';
+
+  if (!isOwner && !isManager) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const { data: prefs, error: prefsError } = await supabase
