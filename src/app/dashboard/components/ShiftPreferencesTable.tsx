@@ -826,7 +826,7 @@ export default function ShiftPreferencesTable({ store, staff = [] }: ShiftPrefer
                               key={date}
                               align="center"
                               sx={{
-                                minWidth: 36, px: 0.5, py: 0.75, fontSize: 11,
+                                minWidth: 36, px: 0.5, py: 1, fontSize: 11,
                                 color: day === 0 ? 'error.main' : day === 6 ? 'primary.main' : 'text.secondary',
                                 bgcolor: day === 0 ? '#fef2f2' : day === 6 ? '#eff6ff' : 'grey.50',
                               }}
@@ -932,7 +932,7 @@ export default function ShiftPreferencesTable({ store, staff = [] }: ShiftPrefer
                                     <Chip
                                       label={shiftType}
                                       size="small"
-                                      sx={{ bgcolor: '#dcfce7', color: '#166534', height: 20, fontSize: 10, fontWeight: 600, '& .MuiChip-label': { px: 0.75 } }}
+                                      sx={{ bgcolor: '#dcfce7', color: '#166534', height: 24, fontSize: 11, fontWeight: 600, '& .MuiChip-label': { px: 0.75 } }}
                                     />
                                   ) : isVacation ? (
                                     <Chip
@@ -940,7 +940,7 @@ export default function ShiftPreferencesTable({ store, staff = [] }: ShiftPrefer
                                       size="small"
                                       sx={{
                                         bgcolor: '#fee2e2', color: '#991b1b',
-                                        height: 20, fontSize: 9, fontWeight: 600,
+                                        height: 24, fontSize: 10, fontWeight: 600,
                                         '& .MuiChip-label': { px: 0.75 },
                                         '@media print': { display: 'none' },
                                       }}
@@ -971,15 +971,15 @@ export default function ShiftPreferencesTable({ store, staff = [] }: ShiftPrefer
                                 <>{summary?.total ?? 0}日</>
                               )}
                             </TableCell>
-                            <TableCell align="center" sx={{ fontWeight: 600, color: rateColor, fontSize: 13 }}>
+                            <TableCell align="center" sx={{ fontWeight: 600, color: rateColor, fontSize: 11 }}>
                               {summary?.satisfactionRate !== null && summary?.satisfactionRate !== undefined
                                 ? `${summary.satisfactionRate}%` : '-'}
                             </TableCell>
-                            <TableCell align="center" sx={{ color: consecColor, fontWeight: consecFontWeight, fontSize: 13 }}>
+                            <TableCell align="center" sx={{ color: consecColor, fontWeight: consecFontWeight, fontSize: 11 }}>
                               {(summary?.maxConsecutive ?? 0) > 0 ? `${summary?.maxConsecutive}日` : '-'}
                               {(summary?.maxConsecutive ?? 0) >= 5 && ' ⚠️'}
                             </TableCell>
-                            <TableCell align="center" sx={{ fontSize: 13, whiteSpace: 'nowrap', '@media print': { display: 'none' } }}>
+                            <TableCell align="center" sx={{ fontSize: 11, whiteSpace: 'nowrap', '@media print': { display: 'none' } }}>
                               {(() => {
                                 const wage = staffNameToWage[name];
                                 if (wage == null || !summary?.total) return <Typography variant="body2" color="text.disabled">-</Typography>;
