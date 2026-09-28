@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 
+// Lambda ARN (arn:aws:lambda:<region>:<account-id>:function:<name>) からリージョンを抽出する。
+// Amplify Hosting compute自体のリージョンとは異なる場合があるため、クライアントには
+// このリージョンを明示的に指定する（未指定だとcomputeのリージョンが使われ、別リージョンの
+// 関数を呼ぼうとして「見つからない」エラーになる）。
+const ARN_REGION_RE = /^arn:aws:lambda:([a-z0-9-]+):/;
+
 let lambdaClient: LambdaClient | null = null;
-function getLambdaClient(): LambdaClient {
-  if (!lambdaClient) {
-    lambdaClient = new LambdaClient({});
+let lambdaClientRegion: string | undefined;
+
+function getLambdaClient(region: string | undefined): LambdaClient {
+  if (!lambdaClient || lambdaClientRegion !== region) {
+    lambdaClient = new LambdaClient(region ? { region } : {});
+    lambdaClientRegion = region;
   }
   return lambdaClient;
 }
@@ -36,10 +45,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ detail: 'サーバー設定エラー' }, { status: 500 });
   }
 
+  const arnRegion = functionArn.match(ARN_REGION_RE)?.[1];
+
   let payload: Uint8Array | undefined;
   let functionError: string | undefined;
   try {
-    const result = await getLambdaClient().send(
+    const result = await getLambdaClient(arnRegion).send(
       new InvokeCommand({
         FunctionName: functionArn,
         InvocationType: 'RequestResponse',
