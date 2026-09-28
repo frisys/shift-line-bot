@@ -12,8 +12,8 @@ frontend:
         # AWS Systems Manager Parameter Store (SecureString) から取得する。
         # OPTIMIZE_LAMBDA_ARN はシークレットではない（IAMロールで呼び出し権限を制御する）ため
         # 他の非公開設定値と同様にここに含める。
-        - env | grep -e '^NEXT_PUBLIC_' >> .env.production
-        - env | grep -e '^APP_ENV=' -e '^TZ=' -e '^OPTIMIZE_LAMBDA_ARN=' -e '_SSM_PATH=' >> .env.production
+        - env | grep -e '^NEXT_PUBLIC_' >> .env.production || true
+        - env | grep -e '^APP_ENV=' -e '^TZ=' -e '^OPTIMIZE_LAMBDA_ARN=' -e '_SSM_PATH=' >> .env.production || true
         - npm run build
   artifacts:
     baseDirectory: .next
