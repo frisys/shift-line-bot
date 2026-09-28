@@ -14,7 +14,7 @@ async function authorizeStoreOwner(request: NextRequest, storeId: string) {
   const token = request.headers.get('Authorization')?.replace('Bearer ', '');
   if (!token) return { error: 'Unauthorized', status: 401 as const };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return { error: 'Unauthorized', status: 401 as const };
 
@@ -54,7 +54,7 @@ export async function GET(
   const auth = await authorizeStoreOwner(request, storeId);
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from('shift_confirmations')
     .select('year_month, is_confirmed, assignments, score, detail')
@@ -81,7 +81,7 @@ export async function POST(
   const { year_month, assignments, score, detail } = await request.json();
   if (!year_month) return NextResponse.json({ error: 'year_month is required' }, { status: 400 });
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from('shift_confirmations')
     .upsert(

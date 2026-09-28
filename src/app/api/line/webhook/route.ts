@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const devLog = (...args: unknown[]) => { if (process.env.NODE_ENV !== 'production') console.log(...args); };
 import crypto from 'crypto';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   messagingApi,
   WebhookEvent,
@@ -12,32 +12,48 @@ import {
   PostbackEvent,
   Profile,
 } from '@line/bot-sdk';
-import fs from 'fs/promises';
+import { getServerSecret } from '@/lib/secrets/server-secrets';
+
+// LINE/Supabaseクライアントはシークレット取得(非同期)が必要なため遅延初期化する。
+// コンテナがウォームな間はPromiseがキャッシュされ、以後の呼び出しは即座に解決する。
+let lineChannelSecret: string;
+let messagingClient: messagingApi.MessagingApiClient;
+let blobClient: messagingApi.MessagingApiBlobClient;
+let supabase: SupabaseClient;
+let initPromise: Promise<void> | null = null;
+
+function ensureInitialized(): Promise<void> {
+  if (!initPromise) {
+    initPromise = (async () => {
+      const [channelSecret, channelAccessToken, serviceRoleKey] = await Promise.all([
+        getServerSecret('LINE_CHANNEL_SECRET'),
+        getServerSecret('LINE_CHANNEL_ACCESS_TOKEN'),
+        getServerSecret('SUPABASE_SERVICE_ROLE_KEY'),
+      ]);
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+
+      lineChannelSecret = channelSecret;
+      messagingClient = new messagingApi.MessagingApiClient({ channelAccessToken });
+      blobClient = new messagingApi.MessagingApiBlobClient({ channelAccessToken });
+      supabase = createClient(supabaseUrl, serviceRoleKey);
+    })();
+  }
+  return initPromise;
+}
 
 // 署名検証
 function validateSignature(body: string, signature: string) {
   const hash = crypto
-    .createHmac('sha256', process.env.LINE_CHANNEL_SECRET!)
+    .createHmac('sha256', lineChannelSecret)
     .update(body)
     .digest('base64');
   return hash === signature;
 }
 
-const messagingClient = new messagingApi.MessagingApiClient({
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!
-});
-
-const blobClient = new messagingApi.MessagingApiBlobClient({
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!
-});
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
-
 // POSTハンドラ
 export async function POST(req: NextRequest) {
+  await ensureInitialized();
+
   const body = await req.text();
   const signature = req.headers.get('x-line-signature') || '';
 
@@ -1355,6 +1371,8 @@ function buildCalendarFlexMessage(
 
 async function createAndSetRichMenu(lineUserId: string) {
   try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://example.com';
+
     // リッチメニュー定義（2行4列例）
     const richMenu: messagingApi.RichMenuRequest = {
       size: { width: 2500, height: 1686 }, // Largeサイズ（推奨）
@@ -1390,7 +1408,7 @@ async function createAndSetRichMenu(lineUserId: string) {
           bounds: { x: 1250, y: 843, width: 1250, height: 843 },
           action: {
             type: 'uri',
-            uri: 'https://your-app.vercel.app/help', // ヘルプページURL
+            uri: `${baseUrl}/help`, // ヘルプページURL
             label: 'ヘルプ',
           },
         },
@@ -1403,7 +1421,14 @@ async function createAndSetRichMenu(lineUserId: string) {
     devLog('リッチメニュー作成成功:', richMenuId);
 
     // 画像アップロード
-    const imageBuffer = await fs.readFile('public/rich-menu.png');
+    // 注意: public/配下のファイルはAWS Amplify Hosting compute (Lambda) のローカルfsからは
+    // 読み込めない（CloudFront/S3経由で配信される）ため、fs.readFileではなく
+    // デプロイ済みの自分自身のURLからHTTPで取得する。
+    const imageResponse = await fetch(`${baseUrl}/rich-menu.png`);
+    if (!imageResponse.ok) {
+      throw new Error(`rich-menu.png の取得に失敗しました: HTTP ${imageResponse.status}`);
+    }
+    const imageBuffer = await imageResponse.arrayBuffer();
     await blobClient.setRichMenuImage(richMenuId, new Blob([imageBuffer], { type: 'image/png' }));
     devLog('リッチメニュー画像アップロード成功');
 

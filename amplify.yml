@@ -1,0 +1,25 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci
+    build:
+      commands:
+        # ビルド成果物 (.env.production) に含めてよいのは「公開してよい値」だけ。
+        # LINE_CHANNEL_SECRET / LINE_CHANNEL_ACCESS_TOKEN / SUPABASE_SERVICE_ROLE_KEY はここに含めない。
+        # これらは src/lib/secrets/server-secrets.ts が実行時に
+        # AWS Systems Manager Parameter Store (SecureString) から取得する。
+        # OPTIMIZE_LAMBDA_ARN はシークレットではない（IAMロールで呼び出し権限を制御する）ため
+        # 他の非公開設定値と同様にここに含める。
+        - env | grep -e '^NEXT_PUBLIC_' >> .env.production
+        - env | grep -e '^APP_ENV=' -e '^TZ=' -e '^OPTIMIZE_LAMBDA_ARN=' -e '_SSM_PATH=' >> .env.production
+        - npm run build
+  artifacts:
+    baseDirectory: .next
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+      - .next/cache/**/*

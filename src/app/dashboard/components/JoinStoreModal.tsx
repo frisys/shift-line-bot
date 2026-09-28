@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { supabase } from '@/lib/supabase/client';
+import { authFetch } from '@/lib/supabase/authFetch';
 import type { Store } from '@/types';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -31,13 +31,9 @@ export default function JoinStoreModal({ onClose, onJoined }: JoinStoreModalProp
     }
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error('ログインが必要です');
-
-      const res = await fetch('/api/stores/join', {
+      const res = await authFetch('/api/stores/join', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ storeCode: storeCode.trim() }),
       });
 

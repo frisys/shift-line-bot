@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase/client';
+import { authFetch } from '@/lib/supabase/authFetch';
 import type { Staff } from '@/types';
 
 export async function updateStaffProfile(staffId: string, data: { display_name: string | null }) {
@@ -17,15 +18,16 @@ export async function createStaff(
     hourly_wage?: number | null;
   }
 ): Promise<{ staff: Staff | null; error: Error | null }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
-  if (!token) return { staff: null, error: new Error('Not authenticated') };
-
-  const res = await fetch(`/api/stores/${storeId}/staff`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(data),
-  });
+  let res: Response;
+  try {
+    res = await authFetch(`/api/stores/${storeId}/staff`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  } catch (err) {
+    return { staff: null, error: err instanceof Error ? err : new Error('Not authenticated') };
+  }
 
   if (!res.ok) {
     const json = await res.json().catch(() => ({}));
@@ -47,18 +49,16 @@ export async function updateStaffStoreSettings(
     >
   >
 ) {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
-  if (!token) return { error: new Error('Not authenticated') };
-
-  const res = await fetch(`/api/stores/${storeId}/staff`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify({ lineUserId, ...data }),
-  });
+  let res: Response;
+  try {
+    res = await authFetch(`/api/stores/${storeId}/staff`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lineUserId, ...data }),
+    });
+  } catch (err) {
+    return { error: err instanceof Error ? err : new Error('Not authenticated') };
+  }
 
   if (!res.ok) {
     const json = await res.json().catch(() => ({}));

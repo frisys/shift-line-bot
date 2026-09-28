@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { ShiftPreference, Store, Staff } from '@/types';
-import { supabase } from '@/lib/supabase/client';
+import { authFetch } from '@/lib/supabase/authFetch';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Button from '@mui/material/Button';
@@ -72,6 +72,7 @@ export default function ShiftPreferencesTable({ store, staff = [] }: ShiftPrefer
   const [editedAssignments, setEditedAssignments] = useState<OptimizeAssignment[] | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<HTMLTableCellElement | null>(null);
   const [popoverInfo, setPopoverInfo] = useState<{ staffName: string; date: string } | null>(null);
 
@@ -131,33 +132,22 @@ export default function ShiftPreferencesTable({ store, staff = [] }: ShiftPrefer
 
     let cancelled = false;
     setPrefsLoading(true);
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session?.access_token || cancelled) return;
-      fetch(
-        `/api/stores/${store.id}/shift-preferences?startDate=${startDate}&endDate=${endDate}`,
-        { headers: { Authorization: `Bearer ${session.access_token}` } }
-      )
-        .then(r => r.ok ? r.json() : Promise.reject(r.status))
-        .then(({ preferences: fetched }: { preferences: ShiftPreference[] }) => {
-          if (!cancelled) setPreferences(fetched);
-        })
-        .catch(() => { if (!cancelled) setPreferences([]); })
-        .finally(() => { if (!cancelled) setPrefsLoading(false); });
-    });
+    authFetch(`/api/stores/${store.id}/shift-preferences?startDate=${startDate}&endDate=${endDate}`)
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(({ preferences: fetched }: { preferences: ShiftPreference[] }) => {
+        if (!cancelled) setPreferences(fetched);
+      })
+      .catch(() => { if (!cancelled) setPreferences([]); })
+      .finally(() => { if (!cancelled) setPrefsLoading(false); });
     return () => { cancelled = true; };
   }, [store?.id, year, month]);
 
   // 保存済みシフト確定結果を取得・復元
   const loadSavedConfirmation = useCallback(async () => {
     if (!store?.id) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return;
     const yearMonth = `${year}-${String(month + 1).padStart(2, '0')}`;
     try {
-      const res = await fetch(
-        `/api/stores/${store.id}/shift-confirmations?year_month=${yearMonth}`,
-        { headers: { Authorization: `Bearer ${session.access_token}` } }
-      );
+      const res = await authFetch(`/api/stores/${store.id}/shift-confirmations?year_month=${yearMonth}`);
       if (!res.ok) return;
       const { confirmation } = await res.json();
       if (confirmation?.assignments) {
@@ -186,24 +176,25 @@ export default function ShiftPreferencesTable({ store, staff = [] }: ShiftPrefer
     setPopoverInfo(null);
   }, [optimizeResult]);
 
-  const saveConfirmation = async (result: OptimizeResult) => {
-    if (!store?.id || !result.assignments) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return;
+  const saveConfirmation = async (result: OptimizeResult): Promise<boolean> => {
+    if (!store?.id || !result.assignments) return false;
     const yearMonth = `${year}-${String(month + 1).padStart(2, '0')}`;
-    await fetch(`/api/stores/${store.id}/shift-confirmations`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
-        year_month: yearMonth,
-        assignments: result.assignments,
-        score: result.score,
-        detail: result.detail,
-      }),
-    });
+    try {
+      const res = await authFetch(`/api/stores/${store.id}/shift-confirmations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          year_month: yearMonth,
+          assignments: result.assignments,
+          score: result.score,
+          detail: result.detail,
+        }),
+      });
+      return res.ok;
+    } catch {
+      // 未認証/401はauthFetch側でログイン画面へ遷移済みのため、ここでは失敗として返すのみ
+      return false;
+    }
   };
 
   const handlePrevMonth = () => {
@@ -311,7 +302,13 @@ export default function ShiftPreferencesTable({ store, staff = [] }: ShiftPrefer
       const data: OptimizeResult = await res.json();
       setOptimizeResult(data);
       setInnerTab('result');
-      await saveConfirmation(data);
+      const saved = await saveConfirmation(data);
+      if (saved) {
+        setSaveError(null);
+      } else {
+        setSaveError('シフト作成結果の保存に失敗しました。結果は表示されていますが保存されていません。「保存」ボタンで再試行してください。');
+        setHasUnsavedChanges(true);
+      }
     } catch (err) {
       setOptimizeError(err instanceof Error ? err.message : '最適化に失敗しました');
     } finally {
@@ -374,9 +371,14 @@ export default function ShiftPreferencesTable({ store, staff = [] }: ShiftPrefer
       score: optimizeResult?.score ?? null,
       detail: optimizeResult?.detail ?? null,
     };
-    await saveConfirmation(result);
-    setOptimizeResult(result);
-    setHasUnsavedChanges(false);
+    const saved = await saveConfirmation(result);
+    if (saved) {
+      setSaveError(null);
+      setOptimizeResult(result);
+      setHasUnsavedChanges(false);
+    } else {
+      setSaveError('保存に失敗しました。もう一度お試しください。');
+    }
     setSaving(false);
   };
 
@@ -602,6 +604,11 @@ export default function ShiftPreferencesTable({ store, staff = [] }: ShiftPrefer
       {/* 最適化エラー */}
       {optimizeError && (
         <Alert severity="error" sx={{ mb: 2 }}>{optimizeError}</Alert>
+      )}
+
+      {/* 保存エラー */}
+      {saveError && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setSaveError(null)}>{saveError}</Alert>
       )}
 
       {/* 内部タブ */}

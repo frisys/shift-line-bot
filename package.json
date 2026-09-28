@@ -10,6 +10,8 @@
     "test": "jest"
   },
   "dependencies": {
+    "@aws-sdk/client-lambda": "^3.1131.0",
+    "@aws-sdk/client-ssm": "^3.1131.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@line/bot-sdk": "^10.6.0",
@@ -35,6 +37,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "jest": "^29.7.0",
+    "jest-util": "^29.7.0",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.11",
     "tsx": "^4.21.0",

@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
   const token = authHeader?.replace('Bearer ', '');
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const supabaseAdmin = createServerClient();
+  const supabaseAdmin = await createServerClient();
 
   const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

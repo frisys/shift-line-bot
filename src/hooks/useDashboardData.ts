@@ -5,6 +5,7 @@ const devLog = (...args: unknown[]) => { if (process.env.NODE_ENV !== 'productio
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { authFetch } from '@/lib/supabase/authFetch';
 import { User, Store, Staff } from '@/types';
 
 export function useDashboardData() {
@@ -37,15 +38,11 @@ export function useDashboardData() {
         setUser(currentUser);
 
         devLog('[useDashboardData] stores 取得: 開始', { owner_user_id: currentUser.id });
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
-        const accessToken = currentSession?.access_token;
 
         const [ownedResult, managedRes] = await Promise.all([
           supabase.from('stores').select('*').eq('owner_user_id', currentUser.id),
-          accessToken
-            ? fetch('/api/stores/managed', { headers: { Authorization: `Bearer ${accessToken}` } })
-                .then(r => r.ok ? r.json() : { stores: [] })
-            : Promise.resolve({ stores: [] }),
+          authFetch('/api/stores/managed')
+            .then(r => r.ok ? r.json() : { stores: [] }),
         ]);
         devLog('[useDashboardData] stores 取得: 完了', { owned: ownedResult.data?.length, managed: managedRes.stores?.length });
 
@@ -92,10 +89,7 @@ export function useDashboardData() {
       try {
         // スタッフ（user_stores は RLS でクライアントから読めないため API 経由）
         devLog('[useDashboardData] staff API 取得: 開始', { store_id: selectedStoreId });
-        const { data: { session } } = await supabase.auth.getSession();
-        const staffRes = await fetch(`/api/stores/${selectedStoreId}/staff`, {
-          headers: { Authorization: `Bearer ${session?.access_token}` },
-        });
+        const staffRes = await authFetch(`/api/stores/${selectedStoreId}/staff`);
         if (!staffRes.ok) {
           throw new Error(`staff API エラー: ${staffRes.status}`);
         }
