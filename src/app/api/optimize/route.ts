@@ -54,7 +54,9 @@ export async function POST(req: NextRequest) {
       new InvokeCommand({
         FunctionName: functionArn,
         InvocationType: 'RequestResponse',
-        Payload: Buffer.from(JSON.stringify(body)),
+        // Lambda側は event["body"] をJSON文字列として json.loads() する実装のため、
+        // ペイロードをそのまま渡すのではなく body キーに文字列化したJSONを入れる。
+        Payload: Buffer.from(JSON.stringify({ body: JSON.stringify(body) })),
       })
     );
     payload = result.Payload;
