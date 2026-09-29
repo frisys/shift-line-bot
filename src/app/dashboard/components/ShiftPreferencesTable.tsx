@@ -916,7 +916,6 @@ export default function ShiftPreferencesTable({ store, staff = [] }: ShiftPrefer
                               const shiftType = dateMap[date];
                               const isActive = popoverInfo?.staffName === name && popoverInfo?.date === date;
                               const day = new Date(date + 'T00:00:00+09:00').getDay();
-                              const isVacation = !shiftType && groupedByStaff[name]?.[date]?.status === 'no';
                               return (
                                 <TableCell
                                   key={date}
@@ -941,18 +940,9 @@ export default function ShiftPreferencesTable({ store, staff = [] }: ShiftPrefer
                                       size="small"
                                       sx={{ bgcolor: '#dcfce7', color: '#166534', height: 24, fontSize: 11, fontWeight: 600, '& .MuiChip-label': { px: 0.75 } }}
                                     />
-                                  ) : isVacation ? (
-                                    <Chip
-                                      label="休暇希望"
-                                      size="small"
-                                      sx={{
-                                        bgcolor: '#fee2e2', color: '#991b1b',
-                                        height: 24, fontSize: 10, fontWeight: 600,
-                                        '& .MuiChip-label': { px: 0.75 },
-                                        '@media print': { display: 'none' },
-                                      }}
-                                    />
-                                  ) : null}
+                                  ) : (
+                                    <Box sx={{ color: 'text.disabled' }}>-</Box>
+                                  )}
                                 </TableCell>
                               );
                             })}
